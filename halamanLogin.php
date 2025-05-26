@@ -1,3 +1,6 @@
+<?php
+session_start();
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -21,18 +24,10 @@
             <p class="welcome-text">SELAMAT DATANG KEMBALI👋🏻</p>
             <h2 class="subtitle">Lanjutkan masuk ke akunmu!</h2>
 
-            <button class="google-login">
-                <img src="https://cdn.pixabay.com/photo/2017/01/19/09/11/logo-google-1991840_640.png" alt="Google Logo" class="google-icon">
-                Masuk dengan Google
-            </button>
-
-            <p class="or-text">---atau---</p>
-
             <?php
-            session_start(); // Start session to access session variables
             if (isset($_SESSION['login_error']) && !empty($_SESSION['login_error'])) {
-                echo '<div class="error-message">' . htmlspecialchars($_SESSION['login_error']) . '</div>';
-                unset($_SESSION['login_error']); // Clear the error message after displaying it
+                echo '<div style="background: #fee2e2; color: #b91c1c; padding: 10px; border-radius: 8px; margin-bottom: 20px; text-align: center; font-weight: bold;">' . htmlspecialchars($_SESSION['login_error']) . '</div>';
+                unset($_SESSION['login_error']);
             }
             ?>
 
@@ -44,6 +39,8 @@
                 <div class="input-group">
                     <label for="password">Password</label>
                     <input type="password" id="password" name="password" placeholder="********" required>
+                </div>
+                <div style="text-align: right; margin-top: 5px; margin-bottom: 20px;"> <a class="signup-link" href="forgot_password.php" style="font-size: 14px;">Lupa Password?</a>
                 </div>
                 <button class="submit-btn" type="submit">MASUK</button>
             </form>

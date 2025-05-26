@@ -201,14 +201,3 @@ body {
         display: block;
     }
 }
-
-/* ====== Error Message Style ====== */
-.error-message {
-    background: #fee2e2; /* light red background */
-    color: #b91c1c; /* dark red text */
-    padding: 10px;
-    border-radius: 8px;
-    margin-bottom: 16px; /* space below the error message */
-    text-align: center;
-    font-weight: 500;
-}
