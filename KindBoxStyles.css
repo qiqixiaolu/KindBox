@@ -1,0 +1,214 @@
+/* ====== Global Styles ====== */
+body {
+    font-family: 'Roboto', sans-serif;
+    background: #f3f4f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+}
+
+/* ====== Container ====== */
+.container {
+    background: white;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    max-width: 600px;
+    width: 100%;
+    margin: auto;
+}
+
+/* ====== Logo & Title ====== */
+.logo {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.logo img {
+    width: 60px;
+    height: 40px;
+    margin-right: 10px;
+}
+
+.logo .title {
+    font-size: 24px;
+    font-weight: bold;
+    color: #059669;
+}
+
+/* ====== Text Styles ====== */
+.welcome-text {
+    color: #374151;
+    font-size: 18px;
+    margin-bottom: 8px;
+}
+
+.subtitle {
+    font-size: 20px;
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 24px;
+}
+
+/* ====== Google Login Button ====== */
+.google-login {
+    width: 100%;
+    background: #d1fae5;
+    color: #0f2a1d;
+    padding: 12px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    border: 1px solid #d1d5db;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.3s ease-in-out;
+}
+
+.google-login:hover {
+    background: #f3f4f6;
+}
+
+.google-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+}
+
+/* ====== OR Text ====== */
+.or-text {
+    text-align: center;
+    color: #9ca3af;
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
+.form-section {
+    margin-left: 25px;
+    margin-right: 25px;
+    width: 100%;
+    max-width: 350px;
+}
+
+/* ====== Input Group ====== */
+.input-group {
+    margin-bottom: 16px;
+}
+
+.input-group label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 5px;
+    color: #0f2a1d;
+}
+
+.input-group input {
+    width: 92.5%;
+    padding: 12px;
+    background: #d1fae5;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    outline: none;
+    font-size: 14px;
+    color: #0f2a1d;
+}
+
+.input-group input:focus {
+    border-color: #059669;
+    box-shadow: 0 0 4px #059669;
+}
+
+/* ====== Submit Button ====== */
+.submit-btn {
+    width: 100%;
+    background: #059669;
+    color: white;
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.3s ease-in-out;
+}
+
+.submit-btn:hover {
+    background: #047857;
+}
+
+/* ====== Member Text & Links ====== */
+.member-text {
+    text-align: center;
+    color: #6b7280;
+    margin-top: 16px;
+    font-size: 14px;
+}
+
+.signup-link {
+    color: #059669;
+    font-weight: 600;
+    text-decoration: none;
+    transition: color 0.3s ease-in-out;
+}
+
+.signup-link:hover {
+    color: #047857;
+}
+
+/* ====== Image Section ====== */
+.image-section {
+    text-align: center;
+    margin-top: 24px;
+    margin-bottom: 24px;
+    margin-right: 25px;
+}
+
+.image-section img {
+    max-width: 100%;
+    height: auto;
+}
+
+.mobile-only {
+    display: block;
+}
+
+.desktop-only {
+    display: none;
+}
+
+/* ====== Responsiveness ====== */
+@media (min-width: 768px) {
+    .container {
+        flex-direction: row;
+        max-width: 800px;
+        gap: 50px;
+        padding: 40px;
+    }
+
+    .mobile-only {
+        display: none;
+    }
+
+    .desktop-only {
+        display: block;
+    }
+}
+
+/* ====== Error Message Style ====== */
+.error-message {
+    background: #fee2e2; /* light red background */
+    color: #b91c1c; /* dark red text */
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 16px; /* space below the error message */
+    text-align: center;
+    font-weight: 500;
+}

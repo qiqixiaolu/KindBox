@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Form Upload Barang</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <img src="https://lh3.googleusercontent.com/d/1q0PjKVPzmVWdLiJLpwfJ1rtl-ttyvtDp=w1000" alt="logo">
+      <h1 class="title">KindBox</h1>
+    </div>
+    <form action="upload.php" method="POST" enctype="multipart/form-data" class="form-layout" onsubmit="return validateFileCount()">
+      <div class="form-left">
+        <div class="input-group">
+          <label for="judul">Judul</label>
+          <input type="text" id="judul" name="judul" placeholder="Nama Barang" required>
+        </div>
+        <div class="input-group">
+          <label for="deskripsi">Deskripsi</label>
+          <textarea id="deskripsi" name="deskripsi" placeholder="Ceritakan tentang barangnya..." rows="4" required></textarea>
+        </div>
+        <div class="input-group">
+          <label for="lokasi">Lokasi</label>
+          <input type="text" id="lokasi" name="lokasi" placeholder="Lokasi Barang" required>
+        </div>
+        <div class="input-group">
+          <label for="jumlah">Jumlah</label>
+          <input type="number" id="jumlah" name="jumlah" min="1" required>
+        </div>
+      </div>
+      <div class="form-right">
+        <div class="input-group">
+          <label for="kategori">Kategori</label>
+          <select id="kategori" name="kategori" required>
+            <option value="">-- Pilih Kategori --</option>
+            <option value="pakaian">Pakaian</option>
+            <option value="elektronik">Elektronik</option>
+            <option value="buku">Buku</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label for="kondisi">Kondisi Barang</label>
+          <select id="kondisi" name="kondisi" required>
+            <option value="">-- Pilih Kondisi --</option>
+            <option value="baru">Baru</option>
+            <option value="bekas">Bekas</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label for="foto">Foto Barang (max 5)</label>
+          <input type="file" id="foto" name="foto[]" multiple onchange="previewImages()">
+          <p class="help-text">Pilih maksimal 5 foto (hanya jpg dan png)</p>
+          <div id="fileTypeError" class="error-message" style="display: none;"></div>
+          <div id="imagePreviewContainer" class="image-preview-container"></div>
+          <div id="fileCountError" class="error-message" style="display: none;"></div>
+        </div>
+        <button type="submit" class="submit-btn">KIRIM</button>
+      </div>
+    </form>
+  </div>
+  <script>
+    let previousFiles = [];
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+    
+    function previewImages() {
+      const preview = document.getElementById('imagePreviewContainer');
+      const fileInput = document.getElementById('foto');
+      const errorElement = document.getElementById('fileCountError');
+      const fileTypeError = document.getElementById('fileTypeError');
+      
+      errorElement.style.display = 'none';
+      fileTypeError.style.display = 'none';
+      fileTypeError.innerHTML = '';
+      
+      const newFiles = Array.from(fileInput.files);
+      let validNewFiles = [];
+      let invalidFiles = [];
+      
+      newFiles.forEach(file => {
+        if (!allowedTypes.includes(file.type)) {
+          invalidFiles.push(file.name);
+        } else {
+          validNewFiles.push(file);
+        }
+      });
+
+      if (invalidFiles.length > 0) {
+        let warningText = 'File berikut bukan format gambar yang didukung dan tidak akan diproses:<br>';
+        invalidFiles.forEach(name => {
+          warningText += `- ${name}<br>`;
+        });
+        warningText += 'Hanya file gambar (jpg, jpeg, png, gif) yang diperbolehkan.';
+        
+        fileTypeError.innerHTML = warningText;
+        fileTypeError.style.display = 'block';
+      }
+      
+      const allFiles = [...previousFiles, ...validNewFiles];
+      
+      if (allFiles.length > 5) {
+        errorElement.textContent = 'Maksimal hanya 5 foto yang diperbolehkan!';
+        errorElement.style.display = 'block';
+        return;
+      }
+      
+      preview.innerHTML = '';
+      
+      allFiles.forEach((file, index) => {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+          const imgContainer = document.createElement('div');
+          imgContainer.className = 'preview-item';
+          imgContainer.dataset.index = index;
+          
+          const img = document.createElement('img');
+          img.src = e.target.result;
+          img.title = file.name;
+          img.className = 'preview-image';
+          
+          const filename = document.createElement('p');
+          filename.className = 'preview-filename';
+          filename.textContent = file.name.length > 15 ? file.name.substring(0, 15) + '...' : file.name;
+          
+          const removeBtn = document.createElement('span');
+          removeBtn.className = 'remove-image';
+          removeBtn.innerHTML = '&times;';
+          removeBtn.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const container = this.closest('.preview-item');
+            const indexToRemove = parseInt(container.dataset.index);
+            removeImage(indexToRemove);
+          };
+          
+          imgContainer.appendChild(img);
+          imgContainer.appendChild(filename);
+          imgContainer.appendChild(removeBtn);
+          preview.appendChild(imgContainer);
+        };
+        
+        reader.readAsDataURL(file);
+      });
+      
+      previousFiles = allFiles;
+      updateFileInput();
+    }
+    
+    function removeImage(index) {
+      previousFiles.splice(index, 1);
+      renderPreview();
+    }
+    
+    function renderPreview() {
+      const preview = document.getElementById('imagePreviewContainer');
+      const fileTypeError = document.getElementById('fileTypeError');
+      
+      preview.innerHTML = '';
+      
+      previousFiles.forEach((file, index) => {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+          const imgContainer = document.createElement('div');
+          imgContainer.className = 'preview-item';
+          imgContainer.dataset.index = index;
+          
+          const img = document.createElement('img');
+          img.src = e.target.result;
+          img.title = file.name;
+          img.className = 'preview-image';
+          
+          const filename = document.createElement('p');
+          filename.className = 'preview-filename';
+          filename.textContent = file.name.length > 15 ? file.name.substring(0, 15) + '...' : file.name;
+          
+          const removeBtn = document.createElement('span');
+          removeBtn.className = 'remove-image';
+          removeBtn.innerHTML = '&times;';
+          removeBtn.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const container = this.closest('.preview-item');
+            const indexToRemove = parseInt(container.dataset.index);
+            removeImage(indexToRemove);
+          };
+          
+          imgContainer.appendChild(img);
+          imgContainer.appendChild(filename);
+          imgContainer.appendChild(removeBtn);
+          preview.appendChild(imgContainer);
+        };
+        
+        reader.readAsDataURL(file);
+      });
+      
+      updateFileInput();
+    }
+    
+    function updateFileInput() {
+      const fileInput = document.getElementById('foto');
+      const dataTransfer = new DataTransfer();
+      
+      previousFiles.forEach(file => {
+        dataTransfer.items.add(file);
+      });
+      
+      fileInput.files = dataTransfer.files;
+    }
+    
+    function validateFileCount() {
+      if (previousFiles.length === 0) {
+        const errorElement = document.getElementById('fileCountError');
+        errorElement.textContent = 'Minimal upload 1 foto.';
+        errorElement.style.display = 'block';
+        return false;
+      }
+      
+      if (previousFiles.length > 5) {
+        const errorElement = document.getElementById('fileCountError');
+        errorElement.textContent = 'Maksimal hanya 5 foto yang diperbolehkan!';
+        errorElement.style.display = 'block';
+        return false;
+      }
+      
+      return true;
+    }
+  </script>
+</body>
+</html>
