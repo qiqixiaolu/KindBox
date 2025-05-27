@@ -302,7 +302,7 @@ if ($upload_success) :
         <?php endif; ?>
 
         <div class="button-container">
-            <button class="back-button" onclick="location.href='profile.php'">Kembali ke Profil</button>
+            <button class="back-button" onclick="location.href='halamanProfil.php'">Kembali ke Profil</button>
         </div>
     </div>
 </body>
