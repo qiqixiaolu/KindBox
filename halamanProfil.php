@@ -30,8 +30,12 @@ try {
     }
 
     // Fetch giving history for the logged-in user
+<<<<<<< HEAD
     // ENSURE 'id' IS SELECTED HERE
     $stmt_giving = $conn->prepare("SELECT id, item_name, recipient_username, recipient_location, status, item_image_url, donor_location FROM donations WHERE donor_id = :user_id ORDER BY created_at DESC");
+=======
+    $stmt_giving = $conn->prepare("SELECT item_name, recipient_username, recipient_location, status, item_image_url, donor_location FROM donations WHERE donor_id = :user_id ORDER BY created_at DESC");
+>>>>>>> bb8c0e5ff0b65d5623e784990b782fd0b467c15e
     $stmt_giving->bindParam(':user_id', $user_id);
     $stmt_giving->execute();
     $giving_history = $stmt_giving->fetchAll(PDO::FETCH_ASSOC);
@@ -47,8 +51,12 @@ try {
     $current_level = floor($donations_given_count / 5) + 1;
 
     // Fetch receiving history for the logged-in user (new)
+<<<<<<< HEAD
     // ENSURE 'id' IS SELECTED HERE
     $stmt_receiving = $conn->prepare("SELECT id, item_name, donor_username, donor_location, status, item_image_url FROM donations WHERE recipient_id = :user_id ORDER BY created_at DESC");
+=======
+    $stmt_receiving = $conn->prepare("SELECT item_name, donor_username, donor_location, status, item_image_url FROM donations WHERE recipient_id = :user_id ORDER BY created_at DESC");
+>>>>>>> bb8c0e5ff0b65d5623e784990b782fd0b467c15e
     $stmt_receiving->bindParam(':user_id', $user_id);
     $stmt_receiving->execute();
     $receiving_history = $stmt_receiving->fetchAll(PDO::FETCH_ASSOC);
@@ -65,7 +73,10 @@ $email = htmlspecialchars($user_data['email'] ?? 'email@example.com');
 $location = htmlspecialchars($user_data['location'] ?? 'Lokasi Tidak Diketahui');
 $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'https://storage.googleapis.com/a1aa/image/bd3a933d-2733-4863-bea1-4a32e05e398e.jpg');
 ?>
+<<<<<<< HEAD
 
+=======
+>>>>>>> bb8c0e5ff0b65d5623e784990b782fd0b467c15e
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -79,7 +90,11 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
     body {
       font-family: 'Inter', sans-serif;
       height: 100vh;
+<<<<<<< HEAD
       overflow: hidden; /* Controls overall body scroll */
+=======
+      overflow: hidden;
+>>>>>>> bb8c0e5ff0b65d5623e784990b782fd0b467c15e
     }
     @media (min-width: 768px) {
       .desktop-only {
@@ -105,6 +120,7 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
     .profile-sidebar {
       width: 288px; /* w-72 equivalent */
       flex-shrink: 0;
+<<<<<<< HEAD
       /* Using h-full and overflow-y-auto to allow internal scroll if content exceeds sidebar height */
       height: 100vh; /* Set explicit height to make sticky/scroll work within viewport */
       overflow-y: auto; /* Allow sidebar to scroll internally if its content is too long */
@@ -116,11 +132,24 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
       flex-grow: 1;
       height: 100vh; /* Set explicit height to allow internal scroll */
       overflow-y: auto; /* This is the scrollable main content area */
+=======
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .content-main {
+      flex-grow: 1;
+      height: 100vh;
+      overflow-y: auto;
+>>>>>>> bb8c0e5ff0b65d5623e784990b782fd0b467c15e
     }
   </style>
 </head>
 <body class="bg-white text-[#1f3a2f]">
+<<<<<<< HEAD
 
+=======
+  <!-- Mobile Version -->
+>>>>>>> bb8c0e5ff0b65d5623e784990b782fd0b467c15e
   <div class="mobile-only">
     <header class="bg-[#6b856d] py-3 text-center">
       <h1 class="text-white font-bold text-lg">Profil</h1>
@@ -201,9 +230,15 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
                     <i class="fas fa-info-circle"></i>
                     <?= htmlspecialchars($item['status'] ?? 'Available') ?>
                 </p>
+<<<<<<< HEAD
                 <a href="detailBarang.php?item_id=<?= htmlspecialchars($item['id']) ?>" class="mt-2 w-full bg-[#6b856d] text-white text-xs rounded-md py-1 text-center block">
                     Lihat Detail
                 </a>
+=======
+                <button class="mt-2 w-full bg-[#6b856d] text-white text-xs rounded-md py-1" type="button">
+                    Lihat Detail
+                </button>
+>>>>>>> bb8c0e5ff0b65d5623e784990b782fd0b467c15e
                 </div>
             </article>
             <?php endforeach; ?>
@@ -244,9 +279,15 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
                     <i class="fas fa-info-circle"></i>
                     <?= htmlspecialchars($item['status'] ?? 'Available') ?>
                 </p>
+<<<<<<< HEAD
                 <a href="detailBarang.php?item_id=<?= htmlspecialchars($item['id']) ?>" class="mt-2 w-full bg-[#6b856d] text-white text-xs rounded-md py-1 text-center block">
                     Lihat Detail
                 </a>
+=======
+                <button class="mt-2 w-full bg-[#6b856d] text-white text-xs rounded-md py-1" type="button">
+                    Lihat Detail
+                </button>
+>>>>>>> bb8c0e5ff0b65d5623e784990b782fd0b467c15e
                 </div>
             </article>
             <?php endforeach; ?>
@@ -265,7 +306,11 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
     </main>
     
     <nav aria-label="Primary" class="bg-[#6b856d] py-3 flex justify-around text-white text-xl fixed bottom-0 left-0 w-full max-w-md mx-auto">
+<<<<<<< HEAD
       <button aria-label="Home" class="focus:outline-none" onclick="location.href='beranda.php'">
+=======
+      <button aria-label="Home" class="focus:outline-none" onclick="location.href='index.php'">
+>>>>>>> bb8c0e5ff0b65d5623e784990b782fd0b467c15e
         <i class="fas fa-home"></i>
       </button>
       <button aria-label="Add" class="focus:outline-none" onclick="location.href='halamanTambah.php'">
@@ -277,6 +322,10 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
     </nav>
   </div>
 
+<<<<<<< HEAD
+=======
+  <!-- Desktop Version -->
+>>>>>>> bb8c0e5ff0b65d5623e784990b782fd0b467c15e
   <div class="desktop-only desktop-layout">
     <header class="bg-[#6B8569] flex items-center justify-between px-4 sm:px-6 md:px-10 h-16 fixed top-0 left-0 right-0 z-10">
       <div class="flex items-center space-x-3">
@@ -312,6 +361,10 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
       </div>
     </header>
     
+<<<<<<< HEAD
+=======
+    <!-- Profile Sidebar - Fixed and non-scrollable -->
+>>>>>>> bb8c0e5ff0b65d5623e784990b782fd0b467c15e
     <aside class="profile-sidebar bg-[#DCE9C9] w-72 flex flex-col items-center py-8 px-6 space-y-6 select-none mt-16">
       <img alt="User profile picture" class="rounded-full w-36 h-36 object-cover" src="<?= $profile_picture_url ?>"/>
       <h2 class="font-extrabold text-black text-center text-sm"><?= $full_name ?></h2>
@@ -340,6 +393,10 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
       </button>
     </aside>
     
+<<<<<<< HEAD
+=======
+    <!-- Main Content - Scrollable -->
+>>>>>>> bb8c0e5ff0b65d5623e784990b782fd0b467c15e
     <div class="content-main mt-16">
       <section class="p-6 md:p-10 space-y-6">
         <div class="bg-[#F3F9ED] rounded-md flex flex-col md:flex-row items-center md:items-start space-y-4 md:space-y-0 md:space-x-6 p-6">
@@ -397,11 +454,19 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
                   </div>
                   <div class="flex items-center space-x-1">
                     <i class="fas fa-info-circle"></i>
+<<<<<<< HEAD
                     <span><?= htmlspecialchars($item['status'] ?? 'Available') ?></span>
                   </div>
                   <a href="detailBarang.php?item_id=<?= htmlspecialchars($item['id']) ?>" class="mt-2 w-full bg-[#6b856d] text-white text-xs rounded-md py-1 text-center block">
                     Lihat Detail
                   </a>
+=======
+                    <span><?= htmlspecialchars($item['status'] ?? 'Status Tidak Diketahui') ?></span>
+                  </div>
+                  <button class="mt-2 w-full bg-[#6b856d] text-white text-xs rounded-md py-1" type="button">
+                    Lihat Detail
+                  </button>
+>>>>>>> bb8c0e5ff0b65d5623e784990b782fd0b467c15e
                 </div>
               </article>
             <?php endforeach; ?>
@@ -445,11 +510,19 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
                   </div>
                   <div class="flex items-center space-x-1">
                     <i class="fas fa-info-circle"></i>
+<<<<<<< HEAD
                     <span><?= htmlspecialchars($item['status'] ?? 'Available') ?></span>
                   </div>
                   <a href="detailBarang.php?item_id=<?= htmlspecialchars($item['id']) ?>" class="mt-2 w-full bg-[#6b856d] text-white text-xs rounded-md py-1 text-center block">
                     Lihat Detail
                   </a>
+=======
+                    <span><?= htmlspecialchars($item['status'] ?? 'Status Tidak Diketahui') ?></span>
+                  </div>
+                  <button class="mt-2 w-full bg-[#6b856d] text-white text-xs rounded-md py-1" type="button">
+                    Lihat Detail
+                  </button>
+>>>>>>> bb8c0e5ff0b65d5623e784990b782fd0b467c15e
                 </div>
               </article>
             <?php endforeach; ?>
