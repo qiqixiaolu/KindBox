@@ -75,6 +75,8 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
   <style>
     body {
       font-family: 'Inter', sans-serif;
+      height: 100vh;
+      overflow: hidden;
     }
     @media (min-width: 768px) {
       .desktop-only {
@@ -92,9 +94,25 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
         display: block;
       }
     }
+    /* Custom styles for desktop layout */
+    .desktop-layout {
+      display: flex;
+      height: 100%;
+    }
+    .profile-sidebar {
+      width: 288px; /* w-72 equivalent */
+      flex-shrink: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .content-main {
+      flex-grow: 1;
+      height: 100vh;
+      overflow-y: auto;
+    }
   </style>
 </head>
-<body class="bg-white text-[#1f3a2f] min-h-screen flex flex-col">
+<body class="bg-white text-[#1f3a2f]">
   <!-- Mobile Version -->
   <div class="mobile-only">
     <header class="bg-[#6b856d] py-3 text-center">
@@ -253,8 +271,8 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
   </div>
 
   <!-- Desktop Version -->
-  <div class="desktop-only">
-    <header class="bg-[#6B8569] flex items-center justify-between px-4 sm:px-6 md:px-10 h-16">
+  <div class="desktop-only desktop-layout">
+    <header class="bg-[#6B8569] flex items-center justify-between px-4 sm:px-6 md:px-10 h-16 fixed top-0 left-0 right-0 z-10">
       <div class="flex items-center space-x-3">
         <button aria-label="Open menu" class="text-black text-xl sm:hidden">
           <i class="fas fa-bars"></i>
@@ -287,35 +305,39 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
         </button>
       </div>
     </header>
-    <main class="flex flex-1 overflow-auto">
-      <aside class="bg-[#DCE9C9] w-72 flex flex-col items-center py-8 px-6 space-y-6 select-none">
-        <img alt="User profile picture" class="rounded-full w-36 h-36 object-cover" src="<?= $profile_picture_url ?>"/>
-        <h2 class="font-extrabold text-black text-center text-sm"><?= $full_name ?></h2>
-        <div class="w-full space-y-4 text-xs text-black">
-          <div class="flex items-center space-x-2">
-            <i class="fas fa-user"></i>
-            <span><?= $username ?></span>
-          </div>
-          <div class="flex items-center space-x-2">
-            <i class="fas fa-envelope"></i>
-            <span><?= $email ?></span>
-          </div>
-          <div class="flex items-center space-x-2">
-            <i class="fas fa-map-marker-alt"></i>
-            <span><?= $location ?></span>
-          </div>
+    
+    <!-- Profile Sidebar - Fixed and non-scrollable -->
+    <aside class="profile-sidebar bg-[#DCE9C9] w-72 flex flex-col items-center py-8 px-6 space-y-6 select-none mt-16">
+      <img alt="User profile picture" class="rounded-full w-36 h-36 object-cover" src="<?= $profile_picture_url ?>"/>
+      <h2 class="font-extrabold text-black text-center text-sm"><?= $full_name ?></h2>
+      <div class="w-full space-y-4 text-xs text-black">
+        <div class="flex items-center space-x-2">
+          <i class="fas fa-user"></i>
+          <span><?= $username ?></span>
         </div>
-        <button class="bg-[#A3B3A7] text-black font-semibold text-xs rounded-md py-2 w-full" type="button" onclick="location.href='edit_profile.php'">
-          Edit Profil
-        </button>
-        <button class="bg-[#A3B3A7] text-black font-semibold text-xs rounded-md py-2 w-full" type="button" onclick="location.href='delete_account.php'">
-          Hapus Akun
-        </button>
-        <button class="bg-[#A3B3A7] text-black font-semibold text-xs rounded-md py-2 w-full" type="button" onclick="location.href='logout.php'">
-          Keluar
-        </button>
-      </aside>
-      <section class="flex-1 p-6 md:p-10 space-y-6 overflow-auto">
+        <div class="flex items-center space-x-2">
+          <i class="fas fa-envelope"></i>
+          <span><?= $email ?></span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <i class="fas fa-map-marker-alt"></i>
+          <span><?= $location ?></span>
+        </div>
+      </div>
+      <button class="bg-[#A3B3A7] text-black font-semibold text-xs rounded-md py-2 w-full" type="button" onclick="location.href='edit_profile.php'">
+        Edit Profil
+      </button>
+      <button class="bg-[#A3B3A7] text-black font-semibold text-xs rounded-md py-2 w-full" type="button" onclick="location.href='delete_account.php'">
+        Hapus Akun
+      </button>
+      <button class="bg-[#A3B3A7] text-black font-semibold text-xs rounded-md py-2 w-full" type="button" onclick="location.href='logout.php'">
+        Keluar
+      </button>
+    </aside>
+    
+    <!-- Main Content - Scrollable -->
+    <div class="content-main mt-16">
+      <section class="p-6 md:p-10 space-y-6">
         <div class="bg-[#F3F9ED] rounded-md flex flex-col md:flex-row items-center md:items-start space-y-4 md:space-y-0 md:space-x-6 p-6">
           <div class="bg-[#2F4A27] text-[#E4F0D6] font-extrabold text-5xl flex items-center justify-center rounded-md w-24 h-24 flex-shrink-0">
             <?= $current_level ?>
@@ -373,13 +395,9 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
                     <i class="fas fa-info-circle"></i>
                     <span><?= htmlspecialchars($item['status'] ?? 'Status Tidak Diketahui') ?></span>
                   </div>
-                  <div class="flex items-center space-x-1">
-                    <i class="fas fa-info-circle"></i>
-                    <span><?= htmlspecialchars($item['status'] ?? 'Status Tidak Diketahui') ?></span>
-                </div>
-                <button class="mt-2 w-full bg-[#6b856d] text-white text-xs rounded-md py-1" type="button">
+                  <button class="mt-2 w-full bg-[#6b856d] text-white text-xs rounded-md py-1" type="button">
                     Lihat Detail
-                </button>
+                  </button>
                 </div>
               </article>
             <?php endforeach; ?>
@@ -425,20 +443,16 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
                     <i class="fas fa-info-circle"></i>
                     <span><?= htmlspecialchars($item['status'] ?? 'Status Tidak Diketahui') ?></span>
                   </div>
-                  <div class="flex items-center space-x-1">
-                        <i class="fas fa-info-circle"></i>
-                        <span><?= htmlspecialchars($item['status'] ?? 'Status Tidak Diketahui') ?></span>
-                    </div>
-                    <button class="mt-2 w-full bg-[#6b856d] text-white text-xs rounded-md py-1" type="button">
-                        Lihat Detail
-                    </button>
+                  <button class="mt-2 w-full bg-[#6b856d] text-white text-xs rounded-md py-1" type="button">
+                    Lihat Detail
+                  </button>
                 </div>
               </article>
             <?php endforeach; ?>
           <?php endif; ?>
         </div>
       </section>
-    </main>
+    </div>
   </div>
 </body>
 </html>
