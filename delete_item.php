@@ -42,7 +42,7 @@ try {
         $stmt_delete_item->bindParam(':donor_id', $current_user_id);
 
         if ($stmt_delete_item->execute()) {
-            header("Location: profile.php?success=itemdeleted"); // Redirect to profile or home
+            header("Location: halamanProfil.php?success=itemdeleted"); // Redirect to profile or home
             exit();
         } else {
             // Handle deletion error
