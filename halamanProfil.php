@@ -443,10 +443,6 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
                     <i class="fas fa-map-marker-alt"></i>
                     <span><?= htmlspecialchars($item['donor_location'] ?? 'Lokasi Tidak Diketahui') ?></span>
                   </div>
-                  <div class="flex items-center space-x-1">
-                    <i class="fas fa-info-circle"></i>
-                    <span><?= htmlspecialchars($item['status'] ?? 'Available') ?></span>
-                  </div>
                   <a href="detailBarang.php?item_id=<?= htmlspecialchars($item['id']) ?>" class="mt-2 w-full bg-[#6b856d] text-white text-xs rounded-md py-1 text-center block">
                     Lihat Detail
                   </a>
