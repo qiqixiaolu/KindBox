@@ -252,7 +252,7 @@ $display_profile_picture_url = htmlspecialchars($user_data['profile_picture_url'
             </div>
 
             <button type="submit" class="submit-btn">Simpan Perubahan</button>
-            <button type="button" onclick="window.location.href='halamanBeranda.php'" class="submit-btn !bg-gray-400 hover:!bg-gray-500">Batal</button>
+            <button type="button" onclick="window.location.href='halamanProfil.php'" class="submit-btn !bg-gray-400 hover:!bg-gray-500">Batal</button>
         </form>
     </div>
 
