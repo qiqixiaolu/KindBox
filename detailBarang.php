@@ -17,6 +17,82 @@ if ($item_id === 0) {
     exit();
 }
 
+// --- START: Handle Verification and Rejection ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    $item_id_post = intval($_POST['item_id']);
+    $recipient_user_id = intval($_POST['recipient_user_id']);
+    $action = $_POST['action'];
+
+    // Pastikan item yang sedang diakses adalah milik donor yang sedang login
+    $stmt_check_donor = $conn->prepare("SELECT donor_id FROM donations WHERE id = :item_id");
+    $stmt_check_donor->bindParam(':item_id', $item_id_post);
+    $stmt_check_donor->execute();
+    $item_donor_id = $stmt_check_donor->fetchColumn();
+
+    if ($item_donor_id != $current_user_id) {
+        // Jika bukan donor barang, tolak aksi
+        header("Location: detailBarang.php?item_id=" . $item_id_post . "&error=unauthorized");
+        exit();
+    }
+
+    if ($action === 'verify') {
+        try {
+            // Mulai transaksi
+            $conn->beginTransaction();
+
+            // 1. Update status donasi menjadi 'Diterima' untuk recipient yang dipilih
+            $stmt_update_donation = $conn->prepare("UPDATE donations SET status = 'Diterima', recipient_id = :recipient_id WHERE id = :item_id");
+            $stmt_update_donation->bindParam(':recipient_id', $recipient_user_id);
+            $stmt_update_donation->bindParam(':item_id', $item_id_post);
+            $stmt_update_donation->execute();
+
+            // 2. Hapus semua minat lain untuk item ini (kecuali yang baru saja diterima)
+            $stmt_delete_other_interests = $conn->prepare("DELETE FROM interests WHERE item_id = :item_id AND user_id != :recipient_id");
+            $stmt_delete_other_interests->bindParam(':item_id', $item_id_post);
+            $stmt_delete_other_interests->bindParam(':recipient_id', $recipient_user_id);
+            $stmt_delete_other_interests->execute();
+
+            // 3. Hapus minat dari recipient yang dipilih (karena sudah diverifikasi dan donasi sudah Diterima)
+            $stmt_delete_verified_interest = $conn->prepare("DELETE FROM interests WHERE item_id = :item_id AND user_id = :recipient_id");
+            $stmt_delete_verified_interest->bindParam(':item_id', $item_id_post);
+            $stmt_delete_verified_interest->bindParam(':recipient_id', $recipient_user_id);
+            $stmt_delete_verified_interest->execute();
+            
+            // Commit transaksi
+            $conn->commit();
+
+            $_SESSION['success_message'] = "Peminat berhasil diverifikasi dan barang telah disalurkan.";
+            header("Location: detailBarang.php?item_id=" . $item_id_post); // Redirect kembali ke halaman detail barang
+            exit();
+
+        } catch (PDOException $e) {
+            // Rollback transaksi jika terjadi kesalahan
+            $conn->rollBack();
+            $_SESSION['error_message'] = "Gagal memverifikasi peminat: " . $e->getMessage();
+            header("Location: detailBarang.php?item_id=" . $item_id_post);
+            exit();
+        }
+    } elseif ($action === 'reject') {
+        try {
+            // Hapus minat dari user yang ditolak
+            $stmt_delete_interest = $conn->prepare("DELETE FROM interests WHERE item_id = :item_id AND user_id = :recipient_id");
+            $stmt_delete_interest->bindParam(':item_id', $item_id_post);
+            $stmt_delete_interest->bindParam(':recipient_id', $recipient_user_id);
+            $stmt_delete_interest->execute();
+
+            $_SESSION['success_message'] = "Peminat berhasil ditolak.";
+            header("Location: detailBarang.php?item_id=" . $item_id_post); // Redirect kembali ke halaman detail barang
+            exit();
+        } catch (PDOException $e) {
+            $_SESSION['error_message'] = "Gagal menolak peminat: " . $e->getMessage();
+            header("Location: detailBarang.php?item_id=" . $item_id_post);
+            exit();
+        }
+    }
+}
+// --- END: Handle Verification and Rejection ---
+
+
 $item_details = null;
 $donor_details = null;
 $is_donor = false; // Flag to check if the logged-in user is the donor
@@ -26,11 +102,10 @@ $peminat_list = []; // List of users interested in this item
 
 try {
     // 1. Fetch Item Details
-    // ADDED whatsapp_contact to SELECT statement
     $stmt_item = $conn->prepare("
-        SELECT 
-            d.id, d.item_name, d.item_description, d.item_image_url, 
-            d.status, d.donor_id, d.donor_username, d.donor_location, 
+        SELECT
+            d.id, d.item_name, d.item_description, d.item_image_url,
+            d.status, d.donor_id, d.donor_username, d.donor_location,
             d.item_count, d.category, d.item_condition, d.whatsapp_contact
         FROM donations d
         WHERE d.id = :item_id
@@ -56,8 +131,8 @@ try {
     $stmt_donor->execute();
     $donor_raw_details = $stmt_donor->fetch(PDO::FETCH_ASSOC);
 
-    // Calculate donor's goodness level for star rating
-    $stmt_donor_donations_count = $conn->prepare("SELECT COUNT(*) AS total_donations FROM donations WHERE donor_id = :donor_id");
+    // Calculate donor's goodness level for star rating (counting 'Diterima' status from donations)
+    $stmt_donor_donations_count = $conn->prepare("SELECT COUNT(*) AS total_donations FROM donations WHERE donor_id = :donor_id AND status = 'Diterima'");
     $stmt_donor_donations_count->bindParam(':donor_id', $item_details['donor_id']);
     $stmt_donor_donations_count->execute();
     $donor_donations_count_result = $stmt_donor_donations_count->fetch(PDO::FETCH_ASSOC);
@@ -71,7 +146,6 @@ try {
     ];
 
     // 3. Fetch Peminat (Interested Users) Details (requires 'interests' table)
-    // Check if the 'interests' table exists before querying
     $table_exists_query = $conn->query("SHOW TABLES LIKE 'interests'")->fetch();
     if ($table_exists_query) {
         $stmt_peminat_count = $conn->prepare("SELECT COUNT(*) AS total_peminat FROM interests WHERE item_id = :item_id");
@@ -80,10 +154,11 @@ try {
         $peminat_count_result = $stmt_peminat_count->fetch(PDO::FETCH_ASSOC);
         $peminat_count = $peminat_count_result['total_peminat'];
 
+        // MODIFIED: Added i.nama, i.alamat, i.jumlah, i.item_alasan to the SELECT statement
         $stmt_peminat_list = $conn->prepare("
-            SELECT 
-                u.full_name, u.username, u.profile_picture_url, 
-                (SELECT COUNT(*) FROM donations WHERE donor_id = u.id) AS user_donations_count
+            SELECT
+                u.id AS user_id, u.full_name, u.username, u.profile_picture_url, u.email, u.location, i.whatsapp_user_contact,
+                i.nama AS interest_nama, i.alamat AS interest_alamat, i.jumlah AS interest_jumlah, i.item_alasan AS interest_item_alasan
             FROM interests i
             JOIN users u ON i.user_id = u.id
             WHERE i.item_id = :item_id
@@ -93,16 +168,29 @@ try {
         $raw_peminat_list = $stmt_peminat_list->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($raw_peminat_list as $peminat) {
-            $peminat_level = floor($peminat['user_donations_count'] / 5) + 1;
+            // Fetch user's donations count for level calculation
+            $stmt_user_donations_count = $conn->prepare("SELECT COUNT(*) AS total_donations FROM donations WHERE donor_id = :user_id AND status = 'Diterima'");
+            $stmt_user_donations_count->bindParam(':user_id', $peminat['user_id']);
+            $stmt_user_donations_count->execute();
+            $user_donations_count_result = $stmt_user_donations_count->fetch(PDO::FETCH_ASSOC);
+            $peminat_level = floor($user_donations_count_result['total_donations'] / 5) + 1;
+
             $peminat_list[] = [
+                'user_id' => $peminat['user_id'],
                 'full_name' => htmlspecialchars($peminat['full_name'] ?? 'N/A'),
                 'username' => htmlspecialchars($peminat['username'] ?? 'N/A'),
                 'profile_picture_url' => htmlspecialchars($peminat['profile_picture_url'] ?? 'https://storage.googleapis.com/a1aa/image/bd3a933d-2733-4863-bea1-4a32e05e398e.jpg'),
-                'level' => $peminat_level
+                'level' => $peminat_level,
+                'email' => htmlspecialchars($peminat['email'] ?? 'N/A'),
+                'location' => htmlspecialchars($peminat['location'] ?? 'N/A'),
+                'whatsapp_contact' => htmlspecialchars($peminat['whatsapp_user_contact'] ?? ''),
+                'interest_nama' => htmlspecialchars($peminat['interest_nama'] ?? 'N/A'),
+                'interest_alamat' => htmlspecialchars($peminat['interest_alamat'] ?? 'N/A'),
+                'interest_jumlah' => htmlspecialchars($peminat['interest_jumlah'] ?? 'N/A'),
+                'interest_item_alasan' => htmlspecialchars($peminat['interest_item_alasan'] ?? 'N/A')
             ];
         }
     } else {
-        // If 'interests' table doesn't exist, set count to 0 and list empty
         $peminat_count = 0;
         $peminat_list = [];
     }
@@ -118,7 +206,7 @@ $item_description = htmlspecialchars($item_details['item_description'] ?? 'N/A')
 $item_count = htmlspecialchars($item_details['item_count'] ?? 'N/A');
 $donor_location = htmlspecialchars($item_details['donor_location'] ?? 'N/A');
 $item_image_url = htmlspecialchars($item_details['item_image_url'] ?? 'https://storage.googleapis.com/a1aa/image/placeholder.jpg'); // Placeholder image
-$whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? ''); // NEW: Get WhatsApp contact
+$whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -138,6 +226,49 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
   <style>
     body {
       font-family: "Poppins", sans-serif;
+    }
+    /* Styles for the modal */
+    .modal {
+      display: none; /* Hidden by default */
+      position: fixed; /* Stay in place */
+      z-index: 100; /* Sit on top */
+      left: 0;
+      top: 0;
+      width: 100%; /* Full width */
+      height: 100%; /* Full height */
+      overflow: auto; /* Enable scroll if needed */
+      background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-content {
+      background-color: #fefefe;
+      margin: auto;
+      padding: 20px;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 500px;
+      position: relative;
+    }
+    .close-button {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      position: absolute;
+      top: 10px;
+      right: 20px;
+    }
+    .close-button:hover,
+    .close-button:focus {
+      color: black;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    /* Style for indicated interested items */
+    .item-has-interest {
+        border: 2px solid #6B856D; /* Green border for items with interest */
+        box-shadow: 0 0 8px rgba(107, 133, 109, 0.4); /* Subtle shadow */
     }
   </style>
 </head>
@@ -170,6 +301,30 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
   </header>
 
   <div class="h-14 md:h-16"></div>
+
+  <?php
+    // Tampilkan pesan sukses atau error jika ada
+    if (isset($_SESSION['success_message'])) {
+        echo '<div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mx-auto my-4 max-w-7xl" role="alert">
+                <strong class="font-bold">Sukses!</strong>
+                <span class="block sm:inline">' . $_SESSION['success_message'] . '</span>
+                <span class="absolute top-0 bottom-0 right-0 px-4 py-3" onclick="this.parentElement.style.display=\'none\';">
+                    <svg class="fill-current h-6 w-6 text-green-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>
+                </span>
+              </div>';
+        unset($_SESSION['success_message']);
+    }
+    if (isset($_SESSION['error_message'])) {
+        echo '<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mx-auto my-4 max-w-7xl" role="alert">
+                <strong class="font-bold">Error!</strong>
+                <span class="block sm:inline">' . $_SESSION['error_message'] . '</span>
+                <span class="absolute top-0 bottom-0 right-0 px-4 py-3" onclick="this.parentElement.style.display=\'none\';">
+                    <svg class="fill-current h-6 w-6 text-red-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>
+                </span>
+              </div>';
+        unset($_SESSION['error_message']);
+    }
+  ?>
 
   <?php if (!$is_donor): // Peminat Version ?>
   <div
@@ -264,7 +419,7 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
           </div>
         </div>
         <a
-          href="https://wa.me/<?= htmlspecialchars($whatsapp_contact_item) ?>" 
+          href="https://wa.me/<?= htmlspecialchars($whatsapp_contact_item) ?>"
           target="_blank"
           rel="noopener noreferrer"
           class="bg-[#4F6B4F] hover:bg-[#3e5740] text-white font-semibold rounded-lg px-5 py-3 flex items-center gap-2 select-none"
@@ -356,20 +511,40 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
           <?php else: ?>
             <?php foreach ($peminat_list as $peminat): ?>
               <div
-                class="bg-[#B7C9B7] rounded-lg flex items-center gap-4 px-4 py-3 select-none"
+                class="bg-[#B7C9B7] rounded-lg flex flex-col sm:flex-row items-center sm:items-start gap-4 p-4 select-none cursor-pointer
+                <?php if ($peminat_count > 0) echo 'item-has-interest'; ?> "
+                onclick="showPeminatDetails(
+                    '<?= $peminat['profile_picture_url'] ?>',
+                    '<?= $peminat['username'] ?>',
+                    '<?= $peminat['full_name'] ?>',
+                    '<?= $peminat['location'] ?>',
+                    '<?= $peminat['email'] ?>',
+                    '<?= $peminat['whatsapp_contact'] ?>',
+                    <?= $peminat['level'] ?>,
+                    '<?= $peminat['interest_nama'] ?>',
+                    '<?= $peminat['interest_alamat'] ?>',
+                    '<?= $peminat['interest_jumlah'] ?>',
+                    '<?= $peminat['interest_item_alasan'] ?>'
+                )"
               >
                 <img
                   alt="Profil <?= $peminat['username'] ?>"
-                  class="w-14 h-14 rounded-full object-cover"
+                  class="w-14 h-14 rounded-full object-cover flex-shrink-0"
                   height="56"
                   src="<?= $peminat['profile_picture_url'] ?>"
                   width="56"
                 />
-                <div class="flex-1">
+                <div class="flex-1 text-center sm:text-left">
                   <p class="text-[#4F6B4F] font-semibold text-sm mb-1">
                     <?= $peminat['username'] ?>
                   </p>
-                  <div class="text-[#4F6B4F] text-sm">
+                  <p class="text-[#4F6B4F] text-xs mb-1">
+                    <?= $peminat['full_name'] ?>
+                  </p>
+                  <p class="text-[#4F6B4F] text-xs mb-2">
+                    <?= $peminat['location'] ?>
+                  </p>
+                  <div class="text-[#4F6B4F] text-sm mb-3">
                     <?php
                       $max_stars = 5;
                       for ($i = 1; $i <= $max_stars; $i++) {
@@ -380,6 +555,24 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
                           }
                       }
                     ?>
+                  </div>
+                  <div class="flex flex-col gap-2">
+                      <form method="POST">
+                          <input type="hidden" name="item_id" value="<?= $item_id ?>">
+                          <input type="hidden" name="recipient_user_id" value="<?= $peminat['user_id'] ?>">
+                          <button type="submit" name="action" value="verify"
+                                class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold text-xs rounded-md py-2">
+                                Verifikasi
+                          </button>
+                      </form>
+                      <form method="POST">
+                          <input type="hidden" name="item_id" value="<?= $item_id ?>">
+                          <input type="hidden" name="recipient_user_id" value="<?= $peminat['user_id'] ?>">
+                          <button type="submit" name="action" value="reject"
+                                class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded-md py-2">
+                                Tolak
+                          </button>
+                      </form>
                   </div>
                 </div>
               </div>
@@ -392,6 +585,7 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
         <button
           type="button"
           class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg py-3 select-none"
+          onclick="location.href='edit_item.php?item_id=<?= $item_id ?>'"
         >
           Edit Barang
         </button>
@@ -406,6 +600,36 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
     </section>
   </div>
   <?php endif; ?>
+
+  <div id="peminatDetailsModal" class="modal">
+    <div class="modal-content">
+      <span class="close-button" onclick="closePeminatDetailsModal()">&times;</span>
+      <h3 class="text-xl font-semibold text-[#2F4F2F] mb-4">Detail Peminat</h3>
+      <div class="flex items-center gap-4 mb-4">
+        <img id="modalPeminatImage" alt="Profile Picture" class="w-20 h-20 rounded-full object-cover"/>
+        <div>
+          <p id="modalPeminatUsername" class="text-[#2F4F2F] font-semibold text-lg"></p>
+          <p id="modalPeminatFullName" class="text-[#4F6B4F] text-sm"></p>
+          <div id="modalPeminatLevel" class="text-[#4F6B4F] text-base mt-1"></div>
+        </div>
+      </div>
+      <div class="text-[#2F4F2F] text-sm space-y-2 mb-6">
+        <p><i class="fas fa-map-marker-alt mr-2"></i> Lokasi Akun: <span id="modalPeminatLocation"></span></p>
+        <p><i class="fas fa-envelope mr-2"></i> Email Akun: <span id="modalPeminatEmail"></span></p>
+        <hr class="border-t border-gray-300 my-2" />
+        <h4 class="font-semibold text-base mt-4 mb-2">Detail Pengajuan Minat:</h4>
+        <p><i class="fas fa-user-circle mr-2"></i> Nama Penerima: <span id="modalInterestNama"></span></p>
+        <p><i class="fas fa-home mr-2"></i> Alamat Lengkap: <span id="modalInterestAlamat"></span></p>
+        <p><i class="fas fa-cubes mr-2"></i> Jumlah Barang Diminta: <span id="modalInterestJumlah"></span></p>
+        <p><i class="fas fa-info-circle mr-2"></i> Alasan Minat: <span id="modalInterestAlasan"></span></p>
+        <p><i class="fab fa-whatsapp mr-2"></i> Kontak WhatsApp Peminat: <span id="modalPeminatWhatsapp"></span></p>
+      </div>
+      <a id="modalPeminatWhatsappLink" href="#" target="_blank" rel="noopener noreferrer"
+         class="mt-6 block w-full text-center bg-[#4F6B4F] hover:bg-[#3e5740] text-white font-semibold rounded-lg px-5 py-3 flex items-center justify-center gap-2 select-none">
+        <i class="fab fa-whatsapp text-lg"></i> Hubungi via WhatsApp
+      </a>
+    </div>
+  </div>
 
 
   <nav
@@ -424,6 +648,71 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
       <span>Profil</span>
     </button>
   </nav>
+
+  <script>
+    // Get the modal element
+    var modal = document.getElementById("peminatDetailsModal");
+
+    // Get the <span> element that closes the modal
+    var span = document.getElementsByClassName("close-button")[0];
+
+    // Function to show the modal with peminat details
+    function showPeminatDetails(imageUrl, username, fullName, location, email, whatsapp, level, interestNama, interestAlamat, interestJumlah, interestAlasan) {
+        document.getElementById('modalPeminatImage').src = imageUrl;
+        document.getElementById('modalPeminatUsername').textContent = '@' + username;
+        document.getElementById('modalPeminatFullName').textContent = fullName;
+        document.getElementById('modalPeminatLocation').textContent = location;
+        document.getElementById('modalPeminatEmail').textContent = email;
+
+        // Set WhatsApp contact and link
+        const whatsappTextElement = document.getElementById('modalPeminatWhatsapp');
+        const whatsappLinkElement = document.getElementById('modalPeminatWhatsappLink');
+        if (whatsapp) {
+            whatsappTextElement.textContent = whatsapp;
+            whatsappLinkElement.href = 'https://wa.me/' + whatsapp;
+            whatsappLinkElement.style.display = 'flex'; // Show the button
+        } else {
+            whatsappTextElement.textContent = 'Tidak Tersedia';
+            whatsappLinkElement.style.display = 'none'; // Hide the button if no contact
+        }
+
+        // Set level stars
+        const levelElement = document.getElementById('modalPeminatLevel');
+        levelElement.innerHTML = ''; // Clear previous stars
+        const maxStars = 5;
+        for (let i = 1; i <= maxStars; i++) {
+            const star = document.createElement('i');
+            star.classList.add('fas', 'fa-star');
+            if (i <= level) {
+                star.classList.add('text-yellow-400'); // Filled star
+            } else {
+                star.classList.add('text-gray-300'); // Empty star
+            }
+            levelElement.appendChild(star);
+        }
+
+        // Set interest form details
+        document.getElementById('modalInterestNama').textContent = interestNama;
+        document.getElementById('modalInterestAlamat').textContent = interestAlamat;
+        document.getElementById('modalInterestJumlah').textContent = interestJumlah;
+        document.getElementById('modalInterestAlasan').textContent = interestAlasan;
+
+
+        modal.style.display = "flex"; // Use flex to center the modal content
+    }
+
+    // Function to close the modal
+    function closePeminatDetailsModal() {
+        modal.style.display = "none";
+    }
+
+    // Close the modal if the user clicks anywhere outside of it
+    window.onclick = function(event) {
+        if (event.target == modal) {
+            modal.style.display = "none";
+        }
+    }
+  </script>
 
 </body>
 </html>
