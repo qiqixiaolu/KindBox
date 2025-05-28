@@ -80,7 +80,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['confirm_delete'])) {
     <p class="text-gray-700 mb-6">Anda yakin ingin menghapus akun Anda? Tindakan ini tidak dapat dibatalkan.</p>
     <form action="delete_account.php" method="post">
      <button type="submit" name="confirm_delete" class="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 font-semibold mb-4">Ya, Hapus Akun Saya</button>
-     <a href="user_profile.php" class="block text-center text-sm text-[#6B8569] hover:underline">Batal</a>
+     <a href="halamanProfil.php" class="block text-center text-sm text-[#6B8569] hover:underline">Batal</a>
     </form>
    <?php endif; ?>
   </div>
