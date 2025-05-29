@@ -228,6 +228,7 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1" name="viewport" />
     <title>Detail Barang - <?= $item_name ?></title>
+    <link rel="stylesheet" href="beranda.css" />
     <script src="https://cdn.tailwindcss.com"></script>
     <link
         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css"
@@ -360,16 +361,15 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                 <?= $item_name ?>
             </h2>
 
-            <div class="flex justify-between text-[#2F4F2F] font-semibold text-sm mb-1">
+            <div class="flex justify-between text-[#2F4F2F] text-sm mb-1">
                 <div>
-                    <p>Kondisi Barang</p>
+                    <p class="font-semibold">Kondisi Barang</p>
                     <p class="font-normal mt-0.5">Deskripsi</p>
                 </div>
-                <p class="self-center font-normal"><?= $item_condition ?></p>
+                <div class="pt-0.5">
+                    <p class="font-normal"><?= $item_condition ?></p>
+                </div>
             </div>
-            <p class="text-[#2F4F2F] font-normal text-sm leading-relaxed mb-4">
-                <?= $item_description ?>
-            </p>
 
             <hr class="border-t border-gray-300 mb-4" />
 
@@ -505,16 +505,15 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                 <?= $item_name ?>
             </h2>
 
-            <div class="flex justify-between text-[#2F4F2F] font-semibold text-sm mb-1">
+            <div class="flex justify-between text-[#2F4F2F] text-sm mb-1">
                 <div>
-                    <p>Kondisi Barang</p>
+                    <p class="font-semibold">Kondisi Barang</p>
                     <p class="font-normal mt-0.5">Deskripsi</p>
                 </div>
-                <p class="self-center font-normal"><?= $item_condition ?></p>
+                <div class="pt-0.5">
+                    <p class="font-normal"><?= $item_condition ?></p>
+                </div>
             </div>
-            <p class="text-[#2F4F2F] font-normal text-sm leading-relaxed mb-4">
-                <?= $item_description ?>
-            </p>
 
             <hr class="border-t border-gray-300 mb-4" />
 
@@ -683,23 +682,35 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
         </div>
     </div>
 
-
-    <nav
-        class="fixed bottom-0 left-0 w-full bg-white border-t border-gray-300 flex justify-around items-center py-3 text-[#7B927B] md:hidden"
-    >
-        <button aria-label="Home" class="flex flex-col items-center text-sm" onclick="location.href='beranda.php'">
-            <i class="fas fa-home text-xl"></i>
+    <footer id="mobile-footer">
+        <button
+            aria-label="Home"
+            class="footer-button"
+            type="button"
+            onclick="location.href='halamanBeranda.php'"
+        >
+            <i class="fas fa-home"></i>
             <span>Home</span>
         </button>
-        <button aria-label="Add" class="flex flex-col items-center text-sm" onclick="location.href='halamanTambah.php'">
-            <i class="fas fa-plus-square text-xl"></i>
-            <span>Donasi</span>
+        <button
+            aria-label="Upload Barang"
+            class="footer-button"
+            type="button"
+            onclick="location.href='halamanTambah.php'"
+        >
+            <i class="fas fa-plus-circle"></i>
+            <span>Upload</span>
         </button>
-        <button aria-label="Profile" class="flex flex-col items-center text-sm" onclick="location.href='profile.php'">
-            <i class="fas fa-user text-xl"></i>
+        <button
+            aria-label="Profile"
+            class="footer-button"
+            type="button"
+            onclick="location.href='halamanProfil.php'"
+        >
+            <i class="fas fa-user-circle"></i>
             <span>Profil</span>
         </button>
-    </nav>
+    </footer>
 
     <script>
         // Get the modal element
