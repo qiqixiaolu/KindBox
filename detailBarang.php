@@ -228,7 +228,7 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1" name="viewport" />
     <title>Detail Barang - <?= $item_name ?></title>
-    <link rel="stylesheet" href="beranda.css" />
+    <link rel="stylesheet" href="beranda.css"/>
     <script src="https://cdn.tailwindcss.com"></script>
     <link
         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css"
@@ -342,10 +342,7 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
     ?>
 
     <?php if (!$is_donor): // Peminat Version ?>
-    <div
-        class="max-w-7xl mx-auto min-h-screen flex flex-col md:flex-row md:gap-6 p-4 pt-0 md:pt-6"
-        id="peminat-version"
-    >
+    <div class="max-w-7xl mx-auto min-h-screen flex flex-col md:flex-row md:gap-6 p-4 pt-0 md:pt-6 pb-20" id="peminat-version">
         <section class="md:w-1/3 rounded-xl overflow-hidden relative">
             <img
                 alt="<?= $item_name ?>"
