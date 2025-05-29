@@ -629,7 +629,7 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                 </div>
             </section>
 
-            <div class="flex gap-4">
+            <div class="flex gap-4 mb-16">
                 <button
                     type="button"
                     class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg py-3 select-none"
