@@ -79,10 +79,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>KindBox Home</title>
     <link rel="stylesheet" href="beranda.css" />
-    <link
-        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css"
-        rel="stylesheet"
-    />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Poppins&display=swap" rel="stylesheet" />
 </head>
 <body>
@@ -132,7 +129,7 @@ try {
             </button>
         </form>
         <nav class="desktop-nav">
-            <a href="#" class="nav-link">Home</a>
+            <a href="halamanBeranda.php" class="nav-link">Home</a>
             <a href="halamanTambah.php" class="nav-link">Upload Barang</a>
             <button
                 aria-label="User profile"
@@ -206,7 +203,7 @@ try {
             aria-label="Home"
             class="footer-button"
             type="button"
-            onclick="location.href='beranda.php'"
+            onclick="location.href='halamanBeranda.php'"
         >
             <i class="fas fa-home"></i>
             <span>Home</span>
@@ -224,44 +221,11 @@ try {
             aria-label="Profile"
             class="footer-button"
             type="button"
-            onclick="location.href='profile.php'"
+            onclick="location.href='halamanProfil.php'"
         >
             <i class="fas fa-user-circle"></i>
             <span>Profil</span>
         </button>
     </footer>
-
-    <script>
-        // This script is optional if your beranda.css handles all media queries for display.
-        // It's here based on comments in your original CSS implying JS control.
-        // If your CSS fully manages visibility using @media queries (which it appears to do),
-        // then this script can be removed.
-        const mobileHeader = document.getElementById('mobile-home-header');
-        const desktopHeader = document.getElementById('desktop-header');
-        const mobileFooter = document.getElementById('mobile-footer');
-        const mainContent = document.querySelector('.main-content');
-
-        function adjustLayout() {
-            if (window.innerWidth < 640) { // Mobile view (based on your CSS's sm breakpoint)
-                mobileHeader.style.display = 'flex';
-                desktopHeader.style.display = 'none';
-                mobileFooter.style.display = 'flex';
-                // Adjust main content padding for mobile header/footer
-                mainContent.style.paddingTop = '100px'; // Height of mobile header approx
-                mainContent.style.paddingBottom = '80px'; // Height of mobile footer approx
-            } else { // Desktop view
-                mobileHeader.style.display = 'none';
-                desktopHeader.style.display = 'flex';
-                mobileFooter.style.display = 'none';
-                // Adjust main content padding for desktop header
-                mainContent.style.paddingTop = '80px'; // Height of desktop header approx
-                mainContent.style.paddingBottom = '40px'; // Default bottom padding
-            }
-        }
-
-        // Run on load and on resize
-        window.addEventListener('load', adjustLayout);
-        window.addEventListener('resize', adjustLayout);
-    </script>
 </body>
 </html>

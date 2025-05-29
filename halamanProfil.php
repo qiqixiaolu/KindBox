@@ -1,63 +1,53 @@
 <?php
 session_start();
 require 'db.php'; // Koneksi ke database
-
 // Pastikan user sudah login
 if (!isset($_SESSION['user_id'])) {
     header("Location: halamanLogin.php");
     exit();
 }
-
 $user_id = $_SESSION['user_id'];
 $user_data = null;
 $giving_history = []; // Array to store giving history
 $receiving_history = []; // Array to store receiving history (new)
 $donations_given_count = 0; // To store the count of given items
 $current_level = 1; // Default level
-
 try {
     // Fetch user data
     $stmt = $conn->prepare("SELECT full_name, username, email, location, profile_picture_url FROM users WHERE id = :user_id");
     $stmt->bindParam(':user_id', $user_id);
     $stmt->execute();
     $user_data = $stmt->fetch(PDO::FETCH_ASSOC);
-
     if (!$user_data) {
         // If user data not found, something is wrong, redirect to logout
         session_destroy();
         header("Location: halamanLogin.php");
         exit();
     }
-
     // Fetch giving history for the logged-in user
     // ENSURE 'id' IS SELECTED HERE
     $stmt_giving = $conn->prepare("SELECT id, item_name, recipient_username, recipient_location, status, item_image_url, donor_location FROM donations WHERE donor_id = :user_id ORDER BY created_at DESC");
     $stmt_giving->bindParam(':user_id', $user_id);
     $stmt_giving->execute();
     $giving_history = $stmt_giving->fetchAll(PDO::FETCH_ASSOC);
-
     // Get the count of donations given
     $stmt_donations_count = $conn->prepare("SELECT COUNT(*) AS total_donations FROM donations WHERE donor_id = :user_id");
     $stmt_donations_count->bindParam(':user_id', $user_id);
     $stmt_donations_count->execute();
     $donations_given_count_result = $stmt_donations_count->fetch(PDO::FETCH_ASSOC);
     $donations_given_count = $donations_given_count_result['total_donations'];
-
     // Calculate the current level based on donations_given_count
     $current_level = floor($donations_given_count / 5) + 1;
-
     // Fetch receiving history for the logged-in user (new)
     // ENSURE 'id' IS SELECTED HERE
     $stmt_receiving = $conn->prepare("SELECT id, item_name, donor_username, donor_location, status, item_image_url FROM donations WHERE recipient_id = :user_id ORDER BY created_at DESC");
     $stmt_receiving->bindParam(':user_id', $user_id);
     $stmt_receiving->execute();
     $receiving_history = $stmt_receiving->fetchAll(PDO::FETCH_ASSOC);
-
 } catch (PDOException $e) {
     // Handle database error
     die("Error retrieving user data or history: " . $e->getMessage());
 }
-
 // Set default if data not in DB
 $full_name = htmlspecialchars($user_data['full_name'] ?? 'Nama Pengguna');
 $username = htmlspecialchars($user_data['username'] ?? '@username');
@@ -65,42 +55,43 @@ $email = htmlspecialchars($user_data['email'] ?? 'email@example.com');
 $location = htmlspecialchars($user_data['location'] ?? 'Lokasi Tidak Diketahui');
 $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'https://storage.googleapis.com/a1aa/image/bd3a933d-2733-4863-bea1-4a32e05e398e.jpg');
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta content="width=device-width, initial-scale=1" name="viewport"/>
   <title>KindBox - Profil</title>
+  <link rel="stylesheet" href="beranda.css" />
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins&display=swap" rel="stylesheet"/>
   <style>
     body {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Poppins', sans-serif;
       height: 100vh;
-      overflow: hidden; /* Controls overall body scroll */
     }
     @media (min-width: 768px) {
       .desktop-only {
-        display: block;
+        display: flex !important;
+        overflow: hidden;
       }
       .mobile-only {
-        display: none;
+        display: none !important;
       }
     }
     @media (max-width: 767px) {
       .desktop-only {
-        display: none;
+        display: none !important;
+        overflow: hidden;
       }
       .mobile-only {
-        display: block;
+        display: block !important;
       }
     }
     /* Custom styles for desktop layout */
     .desktop-layout {
       display: flex;
-      height: 100%;
+      height: 100vh;
     }
     .profile-sidebar {
       width: 288px; /* w-72 equivalent */
@@ -117,10 +108,38 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
       height: 100vh; /* Set explicit height to allow internal scroll */
       overflow-y: auto; /* This is the scrollable main content area */
     }
+    /* Mobile footer styles */
+    #mobile-footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background-color: #6b856d;
+      display: flex;
+      justify-content: space-around;
+      padding: 10px 0;
+      z-index: 100;
+    }
+    .footer-button {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: white;
+      font-size: 10px;
+      background: none;
+      border: none;
+    }
+    .footer-button i {
+      font-size: 20px;
+      margin-bottom: 4px;
+    }
+    .footer-button span {
+      font-size: 10px;
+    }
   </style>
 </head>
 <body class="bg-white text-[#1f3a2f]">
-
+  <!-- Mobile Layout -->
   <div class="mobile-only">
     <header class="bg-[#6b856d] py-3 text-center">
       <h1 class="text-white font-bold text-lg">Profil</h1>
@@ -264,54 +283,59 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
       </section>
     </main>
     
-    <nav aria-label="Primary" class="bg-[#6b856d] py-3 flex justify-around text-white text-xl fixed bottom-0 left-0 w-full max-w-md mx-auto">
-      <button aria-label="Home" class="focus:outline-none" onclick="location.href='beranda.php'">
-        <i class="fas fa-home"></i>
-      </button>
-      <button aria-label="Add" class="focus:outline-none" onclick="location.href='halamanTambah.php'">
-        <i class="fas fa-plus"></i>
-      </button>
-      <button aria-label="Profile" class="focus:outline-none" onclick="location.href='profile.php'">
-        <i class="fas fa-user"></i>
-      </button>
-    </nav>
+    <footer id="mobile-footer">
+        <button
+            aria-label="Home"
+            class="footer-button"
+            type="button"
+            onclick="location.href='halamanBeranda.php'"
+        >
+            <i class="fas fa-home"></i>
+            <span>Home</span>
+        </button>
+        <button
+            aria-label="Upload Barang"
+            class="footer-button"
+            type="button"
+            onclick="location.href='halamanTambah.php'"
+        >
+            <i class="fas fa-plus-circle"></i>
+            <span>Upload</span>
+        </button>
+        <button
+            aria-label="Profile"
+            class="footer-button"
+            type="button"
+            onclick="location.href='halamanProfil.php'"
+        >
+            <i class="fas fa-user-circle"></i>
+            <span>Profil</span>
+        </button>
+    </footer>
   </div>
 
+  <!-- Desktop Layout -->
   <div class="desktop-only desktop-layout">
-    <header class="bg-[#6B8569] flex items-center justify-between px-4 sm:px-6 md:px-10 h-16 fixed top-0 left-0 right-0 z-10">
-      <div class="flex items-center space-x-3">
-        <button aria-label="Open menu" class="text-black text-xl sm:hidden">
-          <i class="fas fa-bars"></i>
-        </button>
-        <img alt="KindBox logo with box and hands icon" class="w-10 h-10" height="40" src="https://storage.googleapis.com/a1aa/image/ba6cfd8e-3595-41ca-6af3-146bbdb8fc60.jpg" width="40"/>
-        <span class="font-extrabold text-black text-lg select-none">KindBox</span>
-      </div>
-      <nav class="hidden sm:flex space-x-8 text-black text-sm font-normal">
-        <a class="hover:underline" href="#">Home</a>
-        <a class="hover:underline" href="#">Contact</a>
-        <a class="hover:underline" href="#">About</a>
-        <a class="hover:underline" href="#">Sign Up</a>
-      </nav>
-      <div class="flex items-center space-x-3">
-        <div class="relative">
-          <input class="rounded-md text-xs placeholder:text-xs placeholder:text-[#6B8569] py-2 pl-3 pr-8 focus:outline-none" placeholder="What are you looking for?" style="width: 220px" type="text"/>
-          <button aria-label="Search" class="absolute right-1 top-1/2 -translate-y-1/2 text-black text-xs">
-            <i class="fas fa-search"></i>
-          </button>
+    <header id="desktop-header" class="fixed top-0 left-0 right-0 z-50">
+        <div class="logo-container">
+            <img src="Logo.png" alt="KindBox Logo" class="logo-img" />
+            <span class="logo-text">KindBox</span>
         </div>
-        <button aria-label="Cart" class="relative text-black text-lg">
-          <i class="fas fa-shopping-cart"></i>
-          <span class="absolute -top-1 -right-2 bg-red-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">2</span>
-        </button>
-        <button aria-label="Notifications" class="text-black text-lg">
-          <i class="fas fa-bell"></i>
-        </button>
-        <button aria-label="User account" class="bg-black text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">
-          <i class="fas fa-user"></i>
-        </button>
-      </div>
+        <form class="search-form-desktop">
+            <input type="text" placeholder="Cari di KindBox" class="search-input-desktop" />
+            <button type="button" aria-label="Filter" class="filter-button-desktop">
+                <i class="fas fa-sliders-h"></i>
+            </button>
+        </form>
+        <nav class="desktop-nav">
+            <a href="halamanBeranda.php" class="nav-link">Home</a>
+            <a href="halamanTambah.php" class="nav-link">Upload Barang</a>
+            <button aria-label="User profile" class="profile-button" onclick="location.href='halamanProfil.php'">
+                <img src="<?= htmlspecialchars($profile_picture_url) ?>" alt="Profil Pengguna" class="profile-pic-header">
+            </button>
+        </nav>
     </header>
-    
+      
     <aside class="profile-sidebar bg-[#DCE9C9] w-72 flex flex-col items-center py-8 px-6 space-y-6 select-none mt-16">
       <img alt="User profile picture" class="rounded-full w-36 h-36 object-cover" src="<?= $profile_picture_url ?>"/>
       <h2 class="font-extrabold text-black text-center text-sm"><?= $full_name ?></h2>
@@ -413,7 +437,6 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
             <span>Donasikan Barang</span>
           </article>
         </div>
-
         <h3 class="font-extrabold text-black text-lg mt-8">Riwayat Penerimaan</h3>
         <div class="flex items-center space-x-2 max-w-xl">
           <div class="relative flex-1">
