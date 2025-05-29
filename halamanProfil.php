@@ -199,11 +199,11 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
             <i class="fas fa-sliders-h"></i>
           </button>
         </form>
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-2 gap-3 overflow-y-auto max-h-96">
           <?php if (empty($giving_history)): ?>
             <p class="col-span-full text-center text-gray-500 text-xs">Belum ada riwayat pemberian.</p>
           <?php else: ?>
-            <?php foreach (array_slice($giving_history, 0, 2) as $item): ?>
+            <?php foreach ($giving_history as $item): ?>
             <article class="bg-[#c3d0b3] rounded-lg overflow-hidden">
                 <img alt="<?= htmlspecialchars($item['item_name']) ?>" class="w-full h-24 object-cover rounded-t-lg" src="<?= htmlspecialchars($item['item_image_url']) ?>"/>
                 <div class="p-2 text-xs text-[#2f4a2f]">
@@ -242,11 +242,11 @@ $profile_picture_url = htmlspecialchars($user_data['profile_picture_url'] ?? 'ht
             <i class="fas fa-sliders-h"></i>
           </button>
         </form>
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-2 gap-3 overflow-y-auto max-h-96"> 
           <?php if (empty($receiving_history)): ?>
             <p class="col-span-full text-center text-gray-500 text-xs">Belum ada riwayat penerimaan.</p>
           <?php else: ?>
-            <?php foreach (array_slice($receiving_history, 0, 2) as $item): ?>
+            <?php foreach ($receiving_history as $item): ?>
             <article class="bg-[#c3d0b3] rounded-lg overflow-hidden">
                 <img alt="<?= htmlspecialchars($item['item_name']) ?>" class="w-full h-24 object-cover rounded-t-lg" src="<?= htmlspecialchars($item['item_image_url']) ?>"/>
                 <div class="p-2 text-xs text-[#2f4a2f]">
