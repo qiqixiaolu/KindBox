@@ -1,5 +1,7 @@
 <?php
+
 session_start();
+
 require 'db.php'; // Koneksi ke database
 
 // Pastikan user sudah login
@@ -23,70 +25,116 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $recipient_user_id = intval($_POST['recipient_user_id']);
     $action = $_POST['action'];
 
-    // Pastikan item yang sedang diakses adalah milik donor yang sedang login
-    $stmt_check_donor = $conn->prepare("SELECT donor_id FROM donations WHERE id = :item_id");
-    $stmt_check_donor->bindParam(':item_id', $item_id_post);
-    $stmt_check_donor->execute();
-    $item_donor_id = $stmt_check_donor->fetchColumn();
+    // Fetch item details immediately for action validation
+    $stmt_check_item = $conn->prepare("SELECT donor_id, item_count FROM donations WHERE id = :item_id");
+    $stmt_check_item->bindParam(':item_id', $item_id_post);
+    $stmt_check_item->execute();
+    $item_data_for_action = $stmt_check_item->fetch(PDO::FETCH_ASSOC);
 
-    if ($item_donor_id != $current_user_id) {
-        // Jika bukan donor barang, tolak aksi
-        header("Location: detailBarang.php?item_id=" . $item_id_post . "&error=unauthorized");
+    if (!$item_data_for_action || $item_data_for_action['donor_id'] != $current_user_id) {
+        // If not the donor of the item, deny action
+        $_SESSION['error_message'] = "Unauthorized action.";
+        header("Location: detailBarang.php?item_id=" . $item_id_post);
         exit();
     }
 
+    $current_item_count = $item_data_for_action['item_count'];
+
+    // Fetch the current interest status to prevent re-verification/re-rejection
+    // *** CHANGE: Using 'status' column from 'interests' table for verification status ***
+    $stmt_check_interest_status = $conn->prepare("SELECT status FROM interests WHERE item_id = :item_id AND user_id = :user_id");
+    $stmt_check_interest_status->bindParam(':item_id', $item_id_post);
+    $stmt_check_interest_status->bindParam(':user_id', $recipient_user_id);
+    $stmt_check_interest_status->execute();
+    $interest_current_status = $stmt_check_interest_status->fetchColumn();
+
+    if ($interest_current_status === 'verified') {
+        $_SESSION['error_message'] = "Peminat ini sudah diverifikasi sebelumnya.";
+        header("Location: detailBarang.php?item_id=" . $item_id_post);
+        exit();
+    }
+    if ($interest_current_status === 'rejected') {
+        $_SESSION['error_message'] = "Peminat ini sudah ditolak sebelumnya.";
+        header("Location: detailBarang.php?item_id=" . $item_id_post);
+        exit();
+    }
+
+
     if ($action === 'verify') {
+        // Check item_count only when verifying. This is where the error message for 0 count will appear.
+        if ($current_item_count <= 0) {
+            $_SESSION['error_message'] = "Barang sudah habis, tidak dapat diverifikasi.";
+            header("Location: detailBarang.php?item_id=" . $item_id_post);
+            exit();
+        }
+
+        // Fetch recipient's username and location for donations table update
+        $stmt_fetch_recipient_info = $conn->prepare("SELECT username, location FROM users WHERE id = :user_id");
+        $stmt_fetch_recipient_info->bindParam(':user_id', $recipient_user_id);
+        $stmt_fetch_recipient_info->execute();
+        $recipient_info = $stmt_fetch_recipient_info->fetch(PDO::FETCH_ASSOC);
+        $recipient_username = $recipient_info['username'] ?? 'N/A';
+        $recipient_location = $recipient_info['location'] ?? 'N/A';
+
         try {
-            // Mulai transaksi
+            // Start transaction
             $conn->beginTransaction();
 
-            // 1. Update status donasi menjadi 'Diterima' untuk recipient yang dipilih
-            // Juga set recipient_id
-            $stmt_update_donation = $conn->prepare("UPDATE donations SET status = 'Diterima', recipient_id = :recipient_id WHERE id = :item_id");
-            $stmt_update_donation->bindParam(':recipient_id', $recipient_user_id);
+            // 1. Update the 'interests' status for the verified recipient to 'verified'
+            // *** CHANGE: Updating 'status' column in 'interests' table ***
+            $stmt_update_interest_status = $conn->prepare("UPDATE interests SET status = 'verified' WHERE item_id = :item_id AND user_id = :recipient_id");
+            $stmt_update_interest_status->bindParam(':item_id', $item_id_post);
+            $stmt_update_interest_status->bindParam(':recipient_id', $recipient_user_id);
+            $stmt_update_interest_status->execute();
+
+            // 2. Decrement item_count in donations table and set recipient details
+            // The item_count should only be decremented once for each successful verification
+            // *** CHANGE: Corrected status mapping for 'donations' table ('Received' instead of 'Diterima', 'Available' instead of 'Tersedia') ***
+            $stmt_update_donation = $conn->prepare("
+                UPDATE donations
+                SET item_count = item_count - 1,
+                    recipient_id = :recipient_id,
+                    recipient_username = :recipient_username,
+                    recipient_location = :recipient_location,
+                    status = CASE WHEN item_count - 1 <= 0 THEN 'Received' ELSE 'Available' END
+                WHERE id = :item_id
+            ");
             $stmt_update_donation->bindParam(':item_id', $item_id_post);
+            $stmt_update_donation->bindParam(':recipient_id', $recipient_user_id);
+            $stmt_update_donation->bindParam(':recipient_username', $recipient_username);
+            $stmt_update_donation->bindParam(':recipient_location', $recipient_location);
             $stmt_update_donation->execute();
 
-            // 2. Hapus semua minat lain untuk item ini (kecuali yang baru saja diterima)
-            $stmt_delete_other_interests = $conn->prepare("DELETE FROM interests WHERE item_id = :item_id AND user_id != :recipient_id");
-            $stmt_delete_other_interests->bindParam(':item_id', $item_id_post);
-            $stmt_delete_other_interests->bindParam(':recipient_id', $recipient_user_id);
-            $stmt_delete_other_interests->execute();
-
-            // 3. Hapus minat dari recipient yang dipilih (karena sudah diverifikasi dan donasi sudah Diterima)
-            // Ini akan memastikan bahwa entry di tabel interests dihapus setelah diverifikasi
-            $stmt_delete_verified_interest = $conn->prepare("DELETE FROM interests WHERE item_id = :item_id AND user_id = :recipient_id");
-            $stmt_delete_verified_interest->bindParam(':item_id', $item_id_post);
-            $stmt_delete_verified_interest->bindParam(':recipient_id', $recipient_user_id);
-            $stmt_delete_verified_interest->execute();
-            
-            // Commit transaksi
+            // Commit transaction
             $conn->commit();
 
-            $_SESSION['success_message'] = "Peminat berhasil diverifikasi dan barang telah disalurkan.";
-            header("Location: detailBarang.php?item_id=" . $item_id_post); // Redirect kembali ke halaman detail barang
+            $_SESSION['success_message'] = "Peminat berhasil diverifikasi dan jumlah barang telah berkurang.";
+            header("Location: detailBarang.php?item_id=" . $item_id_post); // Redirect back to detail page
             exit();
 
         } catch (PDOException $e) {
-            // Rollback transaksi jika terjadi kesalahan
+            // Rollback transaction if error occurs
             $conn->rollBack();
             $_SESSION['error_message'] = "Gagal memverifikasi peminat: " . $e->getMessage();
+            error_log("Verification error: " . $e->getMessage()); // Log the error for debugging
             header("Location: detailBarang.php?item_id=" . $item_id_post);
             exit();
         }
     } elseif ($action === 'reject') {
         try {
-            // Hapus minat dari user yang ditolak
-            $stmt_delete_interest = $conn->prepare("DELETE FROM interests WHERE item_id = :item_id AND user_id = :recipient_id");
-            $stmt_delete_interest->bindParam(':item_id', $item_id_post);
-            $stmt_delete_interest->bindParam(':recipient_id', $recipient_user_id);
-            $stmt_delete_interest->execute();
+            // Update interest status to 'rejected'
+            // *** CHANGE: Updating 'status' column in 'interests' table ***
+            $stmt_update_interest_status = $conn->prepare("UPDATE interests SET status = 'rejected' WHERE item_id = :item_id AND user_id = :recipient_id");
+            $stmt_update_interest_status->bindParam(':item_id', $item_id_post);
+            $stmt_update_interest_status->bindParam(':recipient_id', $recipient_user_id);
+            $stmt_update_interest_status->execute();
 
             $_SESSION['success_message'] = "Peminat berhasil ditolak.";
-            header("Location: detailBarang.php?item_id=" . $item_id_post); // Redirect kembali ke halaman detail barang
+            header("Location: detailBarang.php?item_id=" . $item_id_post); // Redirect back to detail page
             exit();
         } catch (PDOException $e) {
             $_SESSION['error_message'] = "Gagal menolak peminat: " . $e->getMessage();
+            error_log("Rejection error: " . $e->getMessage()); // Log the error for debugging
             header("Location: detailBarang.php?item_id=" . $item_id_post);
             exit();
         }
@@ -105,12 +153,13 @@ $peminat_list = []; // List of users interested in this item
 
 try {
     // 1. Fetch Item Details
+    // Ensure item_details is fetched AFTER any POST actions so it reflects the latest state.
     $stmt_item = $conn->prepare("
         SELECT
             d.id, d.item_name, d.item_description, d.item_image_url,
             d.status, d.donor_id, d.donor_username, d.donor_location,
             d.item_count, d.category, d.item_condition, d.whatsapp_contact,
-            d.recipient_id, d.recipient_username, d.recipient_location -- ADDED recipient_id, recipient_username, recipient_location
+            d.recipient_id, d.recipient_username, d.recipient_location
         FROM donations d
         WHERE d.id = :item_id
     ");
@@ -135,8 +184,9 @@ try {
     $stmt_donor->execute();
     $donor_raw_details = $stmt_donor->fetch(PDO::FETCH_ASSOC);
 
-    // Calculate donor's goodness level for star rating (counting 'Diterima' status from donations)
-    $stmt_donor_donations_count = $conn->prepare("SELECT COUNT(*) AS total_donations FROM donations WHERE donor_id = :donor_id AND status = 'Diterima'");
+    // Calculate donor's goodness level for star rating (counting 'Received' status from donations)
+    // *** CHANGE: Using 'Received' as the status for completed donations ***
+    $stmt_donor_donations_count = $conn->prepare("SELECT COUNT(*) AS total_donations FROM donations WHERE donor_id = :donor_id AND status = 'Received'");
     $stmt_donor_donations_count->bindParam(':donor_id', $item_details['donor_id']);
     $stmt_donor_donations_count->execute();
     $donor_donations_count_result = $stmt_donor_donations_count->fetch(PDO::FETCH_ASSOC);
@@ -152,35 +202,56 @@ try {
     // 3. Fetch Peminat (Interested Users) Details (requires 'interests' table)
     $table_exists_query = $conn->query("SHOW TABLES LIKE 'interests'")->fetch();
     if ($table_exists_query) {
+        // Count all interests for this specific item, regardless of status
         $stmt_peminat_count = $conn->prepare("SELECT COUNT(*) AS total_peminat FROM interests WHERE item_id = :item_id");
         $stmt_peminat_count->bindParam(':item_id', $item_id);
         $stmt_peminat_count->execute();
         $peminat_count_result = $stmt_peminat_count->fetch(PDO::FETCH_ASSOC);
         $peminat_count = $peminat_count_result['total_peminat'];
 
-        // Check if the current user has expressed interest
-        $stmt_check_interest = $conn->prepare("SELECT COUNT(*) FROM interests WHERE item_id = :item_id AND user_id = :user_id");
+        // Check the current user's specific interest status
+        $current_user_interest_status = ''; // Initialize
+        // *** CHANGE: Using 'status' column from 'interests' table ***
+        $stmt_check_interest = $conn->prepare("SELECT status FROM interests WHERE item_id = :item_id AND user_id = :user_id");
         $stmt_check_interest->bindParam(':item_id', $item_id);
         $stmt_check_interest->bindParam(':user_id', $current_user_id);
         $stmt_check_interest->execute();
-        $user_has_expressed_interest = $stmt_check_interest->fetchColumn() > 0;
+        $user_has_expressed_interest_data = $stmt_check_interest->fetch(PDO::FETCH_ASSOC);
 
-        // MODIFIED: Added i.nama, i.alamat, i.jumlah, i.item_alasan to the SELECT statement
+        if ($user_has_expressed_interest_data) {
+            $user_has_expressed_interest = true;
+            // *** CHANGE: Accessing 'status' column ***
+            $current_user_interest_status = $user_has_expressed_interest_data['status'];
+        } else {
+            $user_has_expressed_interest = false;
+        }
+
+        // *** CHANGE: Selecting 'status' as 'interest_status' for clarity in array ***
         $stmt_peminat_list = $conn->prepare("
             SELECT
                 i.user_id, u.full_name, u.username, u.profile_picture_url, u.email, u.location, i.whatsapp_user_contact,
-                i.nama AS interest_nama, i.alamat AS interest_alamat, i.jumlah AS interest_jumlah, i.item_alasan AS interest_item_alasan
+                i.nama AS interest_nama, i.alamat AS interest_alamat, i.jumlah AS interest_jumlah, i.item_alasan AS interest_item_alasan,
+                i.status AS interest_status -- Use 'status' column for interest status
             FROM interests i
             JOIN users u ON i.user_id = u.id
             WHERE i.item_id = :item_id
-        ");
+            ORDER BY
+                CASE i.status
+                    WHEN 'pending' THEN 1
+                    WHEN 'verified' THEN 2
+                    WHEN 'rejected' THEN 3
+                    ELSE 4
+                END,
+                i.created_at ASC
+        "); // Order by status: pending first, then verified, then rejected. Then by creation date.
         $stmt_peminat_list->bindParam(':item_id', $item_id);
         $stmt_peminat_list->execute();
         $raw_peminat_list = $stmt_peminat_list->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($raw_peminat_list as $peminat) {
             // Fetch user's donations count for level calculation
-            $stmt_user_donations_count = $conn->prepare("SELECT COUNT(*) AS total_donations FROM donations WHERE donor_id = :user_id AND status = 'Diterima'");
+            // *** CHANGE: Using 'Received' as the status for completed donations ***
+            $stmt_user_donations_count = $conn->prepare("SELECT COUNT(*) AS total_donations FROM donations WHERE donor_id = :user_id AND status = 'Received'");
             $stmt_user_donations_count->bindParam(':user_id', $peminat['user_id']);
             $stmt_user_donations_count->execute();
             $user_donations_count_result = $stmt_user_donations_count->fetch(PDO::FETCH_ASSOC);
@@ -198,7 +269,8 @@ try {
                 'interest_nama' => htmlspecialchars($peminat['interest_nama'] ?? 'N/A'),
                 'interest_alamat' => htmlspecialchars($peminat['interest_alamat'] ?? 'N/A'),
                 'interest_jumlah' => htmlspecialchars($peminat['interest_jumlah'] ?? 'N/A'),
-                'interest_item_alasan' => htmlspecialchars($peminat['interest_item_alasan'] ?? 'N/A')
+                'interest_item_alasan' => htmlspecialchars($peminat['interest_item_alasan'] ?? 'N/A'),
+                'interest_status' => htmlspecialchars($peminat['interest_status'] ?? 'pending') // Added status
             ];
         }
     } else {
@@ -214,13 +286,11 @@ try {
 $item_name = htmlspecialchars($item_details['item_name'] ?? 'N/A');
 $item_condition = htmlspecialchars($item_details['item_condition'] ?? 'N/A');
 $item_description = htmlspecialchars($item_details['item_description'] ?? 'N/A');
-$item_count = htmlspecialchars($item_details['item_count'] ?? 'N/A');
+$item_count = htmlspecialchars($item_details['item_count'] ?? 'N/A'); // This will now reflect the decremented value
 $donor_location = htmlspecialchars($item_details['donor_location'] ?? 'N/A');
 $item_image_url = htmlspecialchars($item_details['item_image_url'] ?? 'https://storage.googleapis.com/a1aa/image/placeholder.jpg'); // Placeholder image
 $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '');
 
-// Check if the current user is the verified recipient
-$is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_details['recipient_id'] == $current_user_id);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -341,8 +411,7 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
         }
     ?>
 
-    <?php if (!$is_donor): // Peminat Version ?>
-    <div class="max-w-7xl mx-auto min-h-screen flex flex-col md:flex-row md:gap-6 p-4 pt-0 md:pt-6 pb-20" id="peminat-version">
+    <div class="max-w-7xl mx-auto min-h-screen flex flex-col md:flex-row md:gap-6 p-4 pt-0 md:pt-6 pb-20">
         <section class="md:w-1/3 rounded-xl overflow-hidden relative">
             <img
                 alt="<?= $item_name ?>"
@@ -351,24 +420,20 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                 src="<?= $item_image_url ?>"
                 width="400"
             />
-            </section>
+        </section>
 
         <section class="md:w-2/3 flex flex-col">
             <h2 class="font-semibold text-[#2F4F2F] text-2xl leading-8 mb-2">
                 <?= $item_name ?>
             </h2>
 
-            <div class="flex justify-between text-[#2F4F2F] text-sm mb-1">
-                <div>
-                    <p class="font-semibold">Kondisi Barang</p>
-                    <p class="font-normal mt-0.5">Deskripsi</p>
-                </div>
-                <div class="pt-0.5">
-                    <p class="font-normal"><?= $item_condition ?></p>
-                </div>
+            <div class="text-[#2F4F2F] text-sm mb-1">
+                <p class="font-semibold">Kondisi Barang: <span class="font-normal"><?= $item_condition ?></span></p>
+                <p class="font-semibold mt-2">Deskripsi:</p>
+                <p class="font-normal mt-0.5 whitespace-pre-wrap"><?= $item_description ?></p>
             </div>
 
-            <hr class="border-t border-gray-300 mb-4" />
+            <hr class="border-t border-gray-300 my-4" />
 
             <div class="text-[#2F4F2F] font-semibold text-sm mb-4">
                 <div class="flex justify-between py-2 border-b border-gray-300">
@@ -399,6 +464,7 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                 </div>
             </div>
 
+            <?php if (!$is_donor): // Peminat Version ?>
             <section
                 aria-label="Informasi Pemberi Barang"
                 class="flex items-center justify-between bg-[#B7C9B7] rounded-lg p-3 mb-6"
@@ -420,7 +486,7 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                                 $max_stars = 5;
                                 for ($i = 1; $i <= $max_stars; $i++) {
                                     if ($i <= $donor_details['level']) {
-                                        echo '<i class="fas fa-star"></i>';
+                                        echo '<i class="fas fa-star text-yellow-400"></i>';
                                     } else {
                                         echo '<i class="fas fa-star text-gray-300"></i>';
                                     }
@@ -440,16 +506,25 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                 </a>
             </section>
 
-            <?php if ($is_verified_recipient): // Condition for verified recipient ?>
+            <?php if ($current_user_interest_status === 'verified'): // Current user's interest is verified ?>
                 <button
                     type="button"
-                    class="bg-gray-400 text-white font-semibold rounded-lg py-2 text-md select-none cursor-not-allowed"
+                    class="bg-green-600 text-white font-semibold rounded-lg py-2 text-md select-none cursor-not-allowed"
                     disabled
                 >
-                    Telah Diterima
+                    Anda Telah Diverifikasi
                 </button>
                 <p class="text-center text-green-700 font-semibold text-sm mt-2">Selamat! Anda telah diverifikasi sebagai penerima barang ini.</p>
-            <?php elseif ($user_has_expressed_interest): // Condition for expressed interest, waiting verification ?>
+            <?php elseif ($current_user_interest_status === 'rejected'): // Current user's interest is rejected ?>
+                <button
+                    type="button"
+                    class="bg-red-600 text-white font-semibold rounded-lg py-2 text-md select-none cursor-not-allowed"
+                    disabled
+                >
+                    Pengajuan Ditolak
+                </button>
+                <p class="text-center text-red-700 text-sm mt-2">Maaf, pengajuan minat Anda telah ditolak oleh pemberi.</p>
+            <?php elseif ($user_has_expressed_interest): // Current user has expressed interest (status is 'pending') ?>
                 <button
                     type="button"
                     class="bg-gray-400 text-white font-semibold rounded-lg py-2 text-md select-none cursor-not-allowed"
@@ -458,8 +533,8 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                     Sudah Minat
                 </button>
                 <p class="text-center text-gray-600 text-sm mt-2">Anda sudah menyatakan minat pada barang ini. Tunggu verifikasi dari pemberi.</p>
-            <?php else: // Condition for no interest expressed yet ?>
-                <?php if ($item_details['item_count'] > 0 && $item_details['status'] === 'Available'): // Only allow interest if available ?>
+            <?php else: // Current user has not expressed interest yet ?>
+                <?php if ($item_details['item_count'] > 0): // Only allow interest if item is available ?>
                 <button
                     type="button"
                     class="bg-[#4F6B4F] hover:bg-[#3e5740] text-white font-semibold rounded-lg py-2 text-md select-none"
@@ -467,82 +542,19 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                 >
                     Minat
                 </button>
-                <?php else: ?>
+                <?php else: // Item is out of stock ?>
                 <button
                     type="button"
                     class="bg-gray-400 text-white font-semibold rounded-lg py-2 text-md select-none cursor-not-allowed"
                     disabled
                 >
-                    Sudah Diverifikasi Pemberi
+                    Barang Habis
                 </button>
-                <p class="text-center text-gray-600 text-sm mt-2">Selamat, barang sudah diverifikasi oleh pemberi dan sudah dapat diambil.</p>
+                <p class="text-center text-gray-600 text-sm mt-2">Maaf, barang ini sudah habis.</p>
                 <?php endif; ?>
             <?php endif; ?>
 
-        </section>
-    </div>
-
-    <?php else: // Pemberi Version (current user is the donor) ?>
-    <div
-        class="max-w-7xl mx-auto min-h-screen flex flex-col md:flex-row md:gap-6 p-4 pt-0 md:pt-6"
-        id="pemberi-version"
-    >
-        <section class="md:w-1/3 rounded-xl overflow-hidden relative">
-            <img
-                alt="<?= $item_name ?>"
-                class="w-full rounded-xl object-cover"
-                height="400"
-                src="<?= $item_image_url ?>"
-                width="400"
-            />
-            </section>
-
-        <section class="md:w-2/3 flex flex-col">
-            <h2 class="font-semibold text-[#2F4F2F] text-2xl leading-8 mb-2">
-                <?= $item_name ?>
-            </h2>
-
-            <div class="flex justify-between text-[#2F4F2F] text-sm mb-1">
-                <div>
-                    <p class="font-semibold">Kondisi Barang</p>
-                    <p class="font-normal mt-0.5">Deskripsi</p>
-                </div>
-                <div class="pt-0.5">
-                    <p class="font-normal"><?= $item_condition ?></p>
-                </div>
-            </div>
-
-            <hr class="border-t border-gray-300 mb-4" />
-
-            <div class="text-[#2F4F2F] font-semibold text-sm mb-4">
-                <div class="flex justify-between py-2 border-b border-gray-300">
-                    <span>Jumlah</span>
-                    <span class="font-normal"><?= $item_count ?></span>
-                </div>
-                <div class="flex justify-between py-2 border-b border-gray-300">
-                    <span>Lokasi</span>
-                    <span class="font-normal border-l border-[#7B927B] pl-3">
-                        <?= $donor_location ?>
-                    </span>
-                </div>
-                <div class="flex justify-between py-2 border-b border-gray-300">
-                    <span class="flex items-center gap-2">
-                        Peminat
-                        <span
-                            class="bg-[#B7C9B7] text-[#4F6B4F] text-xs font-semibold rounded-full px-2 py-0.5 select-none"
-                            ><?= $peminat_count ?></span
-                        >
-                    </span>
-                    <span class="flex items-center gap-2">
-                        Tersedia
-                        <span
-                            class="bg-[#B7C9B7] text-[#4F6B4F] text-xs font-semibold rounded-full px-2 py-0.5 select-none"
-                            ><?= $item_details['item_count'] ?></span
-                        >
-                    </span>
-                </div>
-            </div>
-
+            <?php else: // Pemberi Version (current user is the donor) ?>
             <section aria-label="Daftar Peminat" class="mb-6">
                 <p class="text-[#2F4F2F] font-semibold text-sm mb-4 select-none">
                     Daftar Peminat:
@@ -553,8 +565,12 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                     <?php else: ?>
                         <?php foreach ($peminat_list as $peminat): ?>
                             <div
-                                class="bg-[#B7C9B7] rounded-lg flex flex-col sm:flex-row items-center sm:items-start gap-4 p-4 select-none cursor-pointer
-                                <?php if ($peminat_count > 0) echo 'item-has-interest'; ?> "
+                                class="bg-[#B7C9B7] rounded-lg flex flex-col sm:flex-row items-center sm:items-start gap-4 p-4 select-none
+                                <?php
+                                    if ($peminat['interest_status'] === 'verified') echo 'border-2 border-green-500 shadow-md cursor-pointer';
+                                    elseif ($peminat['interest_status'] === 'rejected') echo 'border-2 border-red-500 opacity-70 cursor-pointer';
+                                    else echo 'cursor-pointer'; // Default for pending
+                                ?> "
                                 onclick="showPeminatDetails(
                                     '<?= $peminat['profile_picture_url'] ?>',
                                     '<?= $peminat['username'] ?>',
@@ -566,7 +582,8 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                                     '<?= $peminat['interest_nama'] ?>',
                                     '<?= $peminat['interest_alamat'] ?>',
                                     '<?= $peminat['interest_jumlah'] ?>',
-                                    '<?= $peminat['interest_item_alasan'] ?>'
+                                    '<?= $peminat['interest_item_alasan'] ?>',
+                                    '<?= $peminat['interest_status'] ?>' // Pass status to modal
                                 )"
                             >
                                 <img
@@ -591,7 +608,7 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                                             $max_stars = 5;
                                             for ($i = 1; $i <= $max_stars; $i++) {
                                                 if ($i <= $peminat['level']) {
-                                                    echo '<i class="fas fa-star"></i>';
+                                                    echo '<i class="fas fa-star text-yellow-400"></i>';
                                                 } else {
                                                     echo '<i class="fas fa-star text-gray-300"></i>';
                                                 }
@@ -599,8 +616,12 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                                         ?>
                                     </div>
                                     <div class="flex flex-col gap-2">
-                                        <?php if ($item_details['status'] === 'Available'): // Only show action buttons if item is still available ?>
-                                        <form method="POST">
+                                        <?php if ($peminat['interest_status'] === 'verified'): ?>
+                                            <p class="text-center text-green-700 font-semibold text-xs">Peminat ini telah diverifikasi!</p>
+                                        <?php elseif ($peminat['interest_status'] === 'rejected'): ?>
+                                            <p class="text-center text-red-700 font-semibold text-xs">Peminat ini telah ditolak.</p>
+                                        <?php else: // interest_status is 'pending' ?>
+                                        <form method="POST" onsubmit="return confirm('Apakah Anda yakin ingin memverifikasi peminat ini? Tindakan ini akan mengurangi jumlah barang jika berhasil.');">
                                             <input type="hidden" name="item_id" value="<?= $item_id ?>">
                                             <input type="hidden" name="recipient_user_id" value="<?= $peminat['user_id'] ?>">
                                             <button type="submit" name="action" value="verify"
@@ -608,7 +629,7 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                                                     Verifikasi
                                             </button>
                                         </form>
-                                        <form method="POST">
+                                        <form method="POST" onsubmit="return confirm('Apakah Anda yakin ingin menolak peminat ini?');">
                                             <input type="hidden" name="item_id" value="<?= $item_id ?>">
                                             <input type="hidden" name="recipient_user_id" value="<?= $peminat['user_id'] ?>">
                                             <button type="submit" name="action" value="reject"
@@ -616,10 +637,6 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                                                     Tolak
                                             </button>
                                         </form>
-                                        <?php elseif ($item_details['status'] === 'Diterima' && $item_details['recipient_id'] == $peminat['user_id']): ?>
-                                            <p class="text-center text-green-700 font-semibold text-xs">Peminat ini telah diverifikasi!</p>
-                                        <?php else: ?>
-                                            <p class="text-center text-gray-500 text-xs">Barang sudah disalurkan ke peminat lain atau tidak tersedia.</p>
                                         <?php endif; ?>
                                     </div>
                                 </div>
@@ -645,9 +662,9 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                     Hapus Barang
                 </button>
             </div>
+            <?php endif; ?>
         </section>
     </div>
-    <?php endif; ?>
 
     <div id="peminatDetailsModal" class="modal">
         <div class="modal-content">
@@ -671,6 +688,7 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
                 <p><i class="fas fa-cubes mr-2"></i> Jumlah Barang Diminta: <span id="modalInterestJumlah"></span></p>
                 <p><i class="fas fa-info-circle mr-2"></i> Alasan Minat: <span id="modalInterestAlasan"></span></p>
                 <p><i class="fab fa-whatsapp mr-2"></i> Kontak WhatsApp Peminat: <span id="modalPeminatWhatsapp"></span></p>
+                <p><i class="fas fa-info-circle mr-2"></i> Status Minat: <span id="modalInterestStatus" class="font-bold"></span></p>
             </div>
             <a id="modalPeminatWhatsappLink" href="#" target="_blank" rel="noopener noreferrer"
                 class="mt-6 block w-full text-center bg-[#4F6B4F] hover:bg-[#3e5740] text-white font-semibold rounded-lg px-5 py-3 flex items-center justify-center gap-2 select-none">
@@ -717,7 +735,7 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
         var span = document.getElementsByClassName("close-button")[0];
 
         // Function to show the modal with peminat details
-        function showPeminatDetails(imageUrl, username, fullName, location, email, whatsapp, level, interestNama, interestAlamat, interestJumlah, interestAlasan) {
+        function showPeminatDetails(imageUrl, username, fullName, location, email, whatsapp, level, interestNama, interestAlamat, interestJumlah, interestAlasan, interestStatus) {
             document.getElementById('modalPeminatImage').src = imageUrl;
             document.getElementById('modalPeminatUsername').textContent = '@' + username;
             document.getElementById('modalPeminatFullName').textContent = fullName;
@@ -756,6 +774,19 @@ $is_verified_recipient = ($item_details['status'] === 'Diterima' && $item_detail
             document.getElementById('modalInterestAlamat').textContent = interestAlamat;
             document.getElementById('modalInterestJumlah').textContent = interestJumlah;
             document.getElementById('modalInterestAlasan').textContent = interestAlasan;
+
+            // Set and style status
+            const modalInterestStatusElement = document.getElementById('modalInterestStatus');
+            modalInterestStatusElement.textContent = interestStatus.charAt(0).toUpperCase() + interestStatus.slice(1); // Capitalize first letter
+
+            modalInterestStatusElement.classList.remove('text-green-600', 'text-red-600', 'text-gray-600'); // Clear previous classes
+            if (interestStatus === 'verified') {
+                modalInterestStatusElement.classList.add('text-green-600');
+            } else if (interestStatus === 'rejected') {
+                modalInterestStatusElement.classList.add('text-red-600');
+            } else { // pending
+                modalInterestStatusElement.classList.add('text-gray-600');
+            }
 
 
             modal.style.display = "flex"; // Use flex to center the modal content

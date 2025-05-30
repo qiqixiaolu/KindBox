@@ -1,8 +1,7 @@
 <?php
 session_start();
-require 'db.php'; // Koneksi ke database
+require 'db.php'; // Ensure this file correctly connects to your database
 
-// Pastikan user sudah login
 if (!isset($_SESSION['user_id'])) {
     header("Location: halamanLogin.php");
     exit();
@@ -11,259 +10,194 @@ if (!isset($_SESSION['user_id'])) {
 $current_user_id = $_SESSION['user_id'];
 $item_id = isset($_GET['item_id']) ? intval($_GET['item_id']) : 0;
 
-if ($item_id === 0 && $_SERVER['REQUEST_METHOD'] !== 'POST') {
-    // Redirect if no item_id is provided on initial load
-    header("Location: beranda.php");
+if ($item_id === 0) {
+    header("Location: beranda.php?error=itemnotfound");
     exit();
 }
 
-$item_details = null;
-$donor_whatsapp = '';
-$form_submit_success = false; // Flag for successful form submission
-$error_message = ''; // For displaying form errors
+$item_name = ''; // Initialize item_name
+$display_form = true; // Flag to control form display
 
-// Handle form submission
+// --- Process Interest Submission ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $nama = trim($_POST['nama'] ?? '');
-    $alamat = trim($_POST['alamat'] ?? '');
-    $jumlah_minat = intval($_POST['jumlah'] ?? 0); // Renamed to avoid conflict with item_count
-    $alasan = trim($_POST['alasan'] ?? '');
-    $whatsapp_user_contact = trim($_POST['whatsapp'] ?? '');
-    $submitted_item_id = intval($_POST['item_id'] ?? 0); // Get item_id from hidden field
+    $nama = htmlspecialchars($_POST['nama']);
+    $alamat = htmlspecialchars($_POST['alamat']);
+    $jumlah = intval($_POST['jumlah']);
+    $item_alasan = htmlspecialchars($_POST['item_alasan']);
+    $whatsapp_user_contact = htmlspecialchars($_POST['whatsapp_user_contact']);
 
-    // Server-side validation
-    if (empty($nama) || empty($alamat) || $jumlah_minat <= 0 || empty($alasan) || empty($whatsapp_user_contact) || $submitted_item_id === 0) {
-        $error_message = "Semua kolom wajib diisi dengan benar.";
-    } elseif (!preg_match('/^628[0-9]{8,11}$/', $whatsapp_user_contact)) {
-        $error_message = "Format Nomor WhatsApp tidak valid. Harap masukkan nomor yang dimulai dengan 628 dan memiliki 11-14 digit (misal: 6281234567890).";
+    // Validate inputs (basic validation, add more as needed)
+    if (empty($nama) || empty($alamat) || $jumlah <= 0 || empty($item_alasan) || empty($whatsapp_user_contact)) {
+        $_SESSION['error_message'] = "Harap lengkapi semua bidang dan pastikan jumlah barang valid.";
     } else {
         try {
-            // Fetch item details again to get donor's info and item_count for comparison
-            $stmt_item_check = $conn->prepare("SELECT donor_id, item_count, whatsapp_contact FROM donations WHERE id = :item_id");
-            $stmt_item_check->bindParam(':item_id', $submitted_item_id);
-            $stmt_item_check->execute();
-            $item_data_check = $stmt_item_check->fetch(PDO::FETCH_ASSOC);
-
-            if (!$item_data_check) {
-                $error_message = "Barang yang Anda minati tidak ditemukan.";
-            } elseif ($item_data_check['item_count'] < $jumlah_minat) {
-                $error_message = "Jumlah barang yang Anda minati melebihi jumlah yang tersedia (" . $item_data_check['item_count'] . ").";
-            } elseif ($item_data_check['donor_id'] == $current_user_id) {
-                 $error_message = "Anda tidak bisa mengajukan minat pada barang Anda sendiri.";
+            // Check if the user has already expressed interest in this item
+            $stmt_check_interest = $conn->prepare("SELECT COUNT(*) FROM interests WHERE item_id = :item_id AND user_id = :user_id");
+            $stmt_check_interest->bindParam(':item_id', $item_id);
+            $stmt_check_interest->bindParam(':user_id', $current_user_id);
+            $stmt_check_interest->execute();
+            if ($stmt_check_interest->fetchColumn() > 0) {
+                $_SESSION['error_message'] = "Anda sudah mengajukan minat untuk barang ini.";
             } else {
-                // Check if user has already expressed interest in this item
-                $stmt_check_interest = $conn->prepare("SELECT id FROM interests WHERE item_id = :item_id AND user_id = :user_id AND status = 'pending'");
-                $stmt_check_interest->bindParam(':item_id', $submitted_item_id);
-                $stmt_check_interest->bindParam(':user_id', $current_user_id);
-                $stmt_check_interest->execute();
-                if ($stmt_check_interest->rowCount() > 0) {
-                    $error_message = "Anda sudah mengajukan minat untuk barang ini. Mohon tunggu konfirmasi dari pemberi.";
-                } else {
-                    // Insert into interests table
-                    $stmt_insert = $conn->prepare("
-                        INSERT INTO interests (item_id, user_id, nama, alamat, jumlah, item_alasan, whatsapp_user_contact, status)
-                        VALUES (:item_id, :user_id, :nama, :alamat, :jumlah, :alasan, :whatsapp_user_contact, 'pending')
-                    ");
-                    $stmt_insert->bindParam(':item_id', $submitted_item_id);
-                    $stmt_insert->bindParam(':user_id', $current_user_id);
-                    $stmt_insert->bindParam(':nama', $nama);
-                    $stmt_insert->bindParam(':alamat', $alamat);
-                    $stmt_insert->bindParam(':jumlah', $jumlah_minat);
-                    $stmt_insert->bindParam(':alasan', $alasan);
-                    $stmt_insert->bindParam(':whatsapp_user_contact', $whatsapp_user_contact);
-                    $stmt_insert->execute();
+                // Insert into interests table
+                $stmt_insert_interest = $conn->prepare("
+                    INSERT INTO interests (item_id, user_id, nama, alamat, jumlah, item_alasan, whatsapp_user_contact, status)
+                    VALUES (:item_id, :user_id, :nama, :alamat, :jumlah, :item_alasan, :whatsapp_user_contact, 'pending')
+                ");
+                $stmt_insert_interest->bindParam(':item_id', $item_id);
+                $stmt_insert_interest->bindParam(':user_id', $current_user_id);
+                $stmt_insert_interest->bindParam(':nama', $nama);
+                $stmt_insert_interest->bindParam(':alamat', $alamat);
+                $stmt_insert_interest->bindParam(':jumlah', $jumlah);
+                $stmt_insert_interest->bindParam(':item_alasan', $item_alasan);
+                $stmt_insert_interest->bindParam(':whatsapp_user_contact', $whatsapp_user_contact);
 
-                    $form_submit_success = true;
-                    $donor_whatsapp = htmlspecialchars($item_data_check['whatsapp_contact'] ?? 'N/A');
+                if ($stmt_insert_interest->execute()) {
+                    $_SESSION['success_message'] = "Minat Anda berhasil diajukan! Pemberi akan segera menghubungi Anda.";
+                    $display_form = false; // Hide the form after successful submission
+                } else {
+                    $_SESSION['error_message'] = "Gagal mengajukan minat. Silakan coba lagi.";
                 }
             }
         } catch (PDOException $e) {
-            error_log("Database error on minat form submission: " . $e->getMessage());
-            $error_message = "Terjadi kesalahan sistem. Mohon coba lagi nanti.";
+            $_SESSION['error_message'] = "Terjadi kesalahan database: " . $e->getMessage();
+            error_log("Minat submission error: " . $e->getMessage());
         }
     }
 }
 
-// Fetch item details (for initial page load or if form submission failed)
+// Fetch item details to display on this page (even if form is hidden)
 try {
-    // Only fetch if not already successful and item_id is valid
-    if (!$form_submit_success && $item_id !== 0) {
-        $stmt_item = $conn->prepare("SELECT whatsapp_contact FROM donations WHERE id = :item_id");
-        $stmt_item->bindParam(':item_id', $item_id);
-        $stmt_item->execute();
-        $item_details_raw = $stmt_item->fetch(PDO::FETCH_ASSOC);
-        if ($item_details_raw) {
-            $donor_whatsapp = htmlspecialchars($item_details_raw['whatsapp_contact'] ?? 'N/A');
-        } else {
-            // Item not found on initial load or after failed submission
-            header("Location: beranda.php?error=itemnotfound");
-            exit();
-        }
+    $stmt_item = $conn->prepare("SELECT item_name FROM donations WHERE id = :item_id");
+    $stmt_item->bindParam(':item_id', $item_id);
+    $stmt_item->execute();
+    $item_details = $stmt_item->fetch(PDO::FETCH_ASSOC);
+
+    if (!$item_details) {
+        header("Location: beranda.php?error=itemnotfound");
+        exit();
     }
+    $item_name = htmlspecialchars($item_details['item_name']);
 } catch (PDOException $e) {
     die("Error fetching item details: " . $e->getMessage());
 }
 ?>
-
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Isi Data Diri</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ajukan Minat Barang</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body {
-            font-family: 'Poppins', sans-serif;
-            background-color: #E4F0D6; /* Default body background for the form */
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column; /* Ensure body is flex column */
-            margin: 0;
-        }
-        /* Basic styling for header and form elements */
-        header {
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Subtle shadow for fixed header */
-        }
-        .container-form { /* New class for the form container */
-            max-width: 600px;
-            margin: 20px auto; /* Center the form */
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        input[type="text"], input[type="number"], input[type="tel"], textarea {
-            border: 1px solid #d1d5db;
-            padding: 0.75rem;
-            border-radius: 0.375rem;
-            background-color: #f3f4f6;
-            transition: border-color 0.2s;
-        }
-        input:focus, textarea:focus {
-            outline: none;
-            border-color: #4F6B4F;
-        }
-        label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-        }
-        .error-message-inline {
-            color: #ef4444; /* red-500 */
-            font-size: 0.875rem;
-            margin-top: 0.5rem;
-        }
-        /* Styles for the success info screen (modified) */
-        .info-screen-wrapper { 
-            flex-grow: 1; /* Make it take all available space */
-            display: flex;
-            justify-content: center; /* Center horizontally */
-            align-items: center; /* Center vertically */
-            /* No background here, let body provide the white background */
-            padding: 20px; /* Some padding around the content */
-            box-sizing: border-box; /* Include padding in element's total width and height */
-        }
-        .info-screen-message { /* The actual message content box */
-            max-width: 400px; /* Max width for the text */
-            padding: 20px; /* Inner padding */
-            text-align: center; /* Center text */
-            color: #4F6B4F; /* Text color */
-        }
-        .info-screen-message h2 {
-            font-size: 1.5rem; /* Larger title */
-            font-weight: 600;
-            margin-bottom: 1rem;
-        }
-        .info-screen-message p {
-            font-size: 1rem;
-            line-height: 1.5;
-            margin-bottom: 1.5rem;
-        }
-        .info-screen-message a {
-            font-size: 1rem;
-        }
-    </style>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600&display=swap" rel="stylesheet"/>
 </head>
-<body class="bg-white min-h-screen flex flex-col">
+<body class="bg-gray-100">
 
-    <header class="bg-[#7B927B] text-white flex items-center p-4">
-        <button onclick="window.history.back()" class="text-lg mr-4">
+    <header
+        class="bg-[#7B927B] flex items-center px-4 py-3 text-white fixed top-0 left-0 w-full z-20 md:hidden"
+        aria-label="Mobile Navigation Header"
+    >
+        <button aria-label="Back" class="mr-4 text-lg" onclick="history.back()">
             <i class="fas fa-arrow-left"></i>
         </button>
-        <h1 class="text-center font-semibold text-lg flex-1">Isi Data Diri</h1>
+        <h1 class="flex-1 text-center font-semibold text-lg leading-6 select-none">
+            Ajukan Minat
+        </h1>
+        <div class="w-6"></div>
     </header>
 
-    <?php if ($form_submit_success): // Display success screen ?>
-        <div id="infoScreen" class="info-screen-wrapper">
-            <div class="info-screen-message">
-                <h2 class="text-xl font-semibold mb-4">Informasi</h2>
-                <p class="mb-6">
-                    Barang yang Anda minati sedang dalam peninjauan oleh pemberi. Tunggu pesan dari pemberi atau hubungi pemberi.
-                </p>
-                <a id="waLink" target="_blank" class="inline-block bg-[#4F6B4F] text-white px-6 py-3 rounded-md"
-                   href="https://wa.me/<?= $donor_whatsapp ?>" rel="noopener noreferrer">
-                    Hubungi Pemberi
-                </a>
-            </div>
-        </div>
-    <?php else: // Display form or error message ?>
-        <div class="container-form">
-            <?php if (!empty($error_message)): ?>
-                <div class="alert-message bg-red-100 text-red-700 border-red-400 p-3 rounded-md mb-4 text-center">
-                    <?= $error_message ?>
-                </div>
-            <?php endif; ?>
+    <header
+        class="bg-[#7B927B] hidden md:flex items-center px-6 py-4 text-white fixed top-0 left-0 w-full z-20"
+        aria-label="Desktop Navigation Header"
+    >
+        <button aria-label="Back" class="mr-6 text-xl" onclick="history.back()">
+            <i class="fas fa-arrow-left"></i>
+        </button>
+        <h1 class="flex-1 text-center font-semibold text-xl leading-7 select-none">
+            Ajukan Minat
+        </h1>
+        <div class="w-8"></div>
+    </header>
 
-            <form id="minatForm" action="minat.php?item_id=<?= htmlspecialchars($item_id) ?>" method="POST" class="flex flex-col gap-4 text-[#4F6B4F]">
-                <input type="hidden" name="item_id" value="<?= htmlspecialchars($item_id) ?>">
+    <div class="h-14 md:h-16"></div> <div class="max-w-md mx-auto my-10 p-6 bg-white rounded-lg shadow-md">
+        <h2 class="text-2xl font-semibold text-center text-[#2F4F2F] mb-6">Ajukan Minat pada Barang: <?= $item_name ?></h2>
 
-                <div>
-                    <label class="text-sm font-medium">Nama</label>
-                    <input type="text" name="nama" required placeholder="Nama Penerima" class="w-full p-3 rounded-md bg-[#E8F2D9] border border-[#4F6B4F]" />
-                </div>
-
-                <div>
-                    <label class="text-sm font-medium">Alamat</label>
-                    <textarea name="alamat" required rows="3" placeholder="Tuliskan alamat secara lengkap untuk keperluan pengiriman" class="w-full p-3 rounded-md bg-[#E8F2D9] border border-[#4F6B4F]"></textarea>
-                </div>
-
-                <div>
-                    <label class="text-sm font-medium">Jumlah</label>
-                    <input type="number" name="jumlah" required placeholder="Jumlah Barang" class="w-full p-3 rounded-md bg-[#E8F2D9] border border-[#4F6B4F]" />
-                </div>
-
-                <div>
-                    <label class="text-sm font-medium">Untuk Apa Barang ini Akan dimanfaatkan</label>
-                    <textarea name="alasan" required rows="3" placeholder="Ceritakan apa yang akan kamu lakukan apabila mendapatkan barang ini" class="w-full p-3 rounded-md bg-[#E8F2D9] border border-[#4F6B4F]"></textarea>
-                </div>
-
-                <div>
-                    <label class="text-sm font-medium">Nomor WhatsApp yang bisa Dihubungi</label>
-                    <input type="tel" name="whatsapp" required pattern="^628[0-9]{8,11}$" placeholder="Nomor WhatsApp (628xxxxxxxxxx)" class="w-full p-3 rounded-md bg-[#E8F2D9] border border-[#4F6B4F]" />
-                    <p class="text-xs text-gray-500 mt-1">Format: 628xxxxxxxxxx (11-14 digit)</p>
-                </div>
-
-                <button type="submit" class="bg-[#4F6B4F] text-white font-semibold py-3 rounded-md mt-4">
-                    Minat
-                </button>
-            </form>
-        </div>
-    <?php endif; ?>
-
-    <script>
-        const form = document.getElementById('minatForm');
-        if (form) { // Check if form exists (it won't on success screen)
-            form.addEventListener('submit', function (e) {
-                const whatsappInput = form.whatsapp;
-                // Client-side pattern check on submit
-                if (!whatsappInput.checkValidity()) {
-                    e.preventDefault(); // Stop form submission if invalid
-                    alert("Nomor WhatsApp tidak valid. Harap masukkan nomor yang dimulai dengan 628 dan memiliki 11-14 digit.");
-                    whatsappInput.focus();
-                }
-            });
+        <?php
+        // Display success or error messages
+        if (isset($_SESSION['success_message'])) {
+            echo '<div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
+                    <strong class="font-bold">Sukses!</strong>
+                    <span class="block sm:inline">' . $_SESSION['success_message'] . '</span>
+                    <span class="absolute top-0 bottom-0 right-0 px-4 py-3" onclick="this.parentElement.style.display=\'none\';">
+                        <svg class="fill-current h-6 w-6 text-green-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>
+                    </span>
+                  </div>';
+            unset($_SESSION['success_message']);
         }
-    </script>
+        if (isset($_SESSION['error_message'])) {
+            echo '<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                    <strong class="font-bold">Error!</strong>
+                    <span class="block sm:inline">' . $_SESSION['error_message'] . '</span>
+                    <span class="absolute top-0 bottom-0 right-0 px-4 py-3" onclick="this.parentElement.style.display=\'none\';">
+                        <svg class="fill-current h-6 w-6 text-red-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>
+                    </span>
+                  </div>';
+            unset($_SESSION['error_message']);
+        }
+        ?>
+
+        <?php if ($display_form): // Show form if not yet submitted successfully ?>
+        <form action="" method="POST">
+            <input type="hidden" name="item_id" value="<?= $item_id ?>">
+            <div class="mb-4">
+                <label for="nama" class="block text-gray-700 text-sm font-bold mb-2">Nama Lengkap Penerima:</label>
+                <input type="text" id="nama" name="nama" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+            </div>
+            <div class="mb-4">
+                <label for="alamat" class="block text-gray-700 text-sm font-bold mb-2">Alamat Lengkap Pengiriman:</label>
+                <textarea id="alamat" name="alamat" rows="4" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required></textarea>
+            </div>
+            <div class="mb-4">
+                <label for="jumlah" class="block text-gray-700 text-sm font-bold mb-2">Jumlah Barang Diminta:</label>
+                <input type="number" id="jumlah" name="jumlah" min="1" value="1" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+            </div>
+            <div class="mb-4">
+                <label for="item_alasan" class="block text-gray-700 text-sm font-bold mb-2">Alasan Minat:</label>
+                <textarea id="item_alasan" name="item_alasan" rows="3" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required></textarea>
+            </div>
+            <div class="mb-6">
+                <label for="whatsapp_user_contact" class="block text-gray-700 text-sm font-bold mb-2">Nomor WhatsApp Anda:</label>
+                <input type="text" id="whatsapp_user_contact" name="whatsapp_user_contact" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="Contoh: 6281234567890" required>
+            </div>
+            <button type="submit" class="bg-[#4F6B4F] hover:bg-[#3e5740] text-white font-semibold rounded-lg py-2 px-4 w-full">
+                Ajukan Minat
+            </button>
+        </form>
+        <?php else: // Show only the success message and back button if form submission was successful ?>
+            <p class="text-center text-green-700 font-semibold text-lg mb-4">Pengajuan minat Anda untuk <?= $item_name ?> berhasil!</p>
+            <p class="text-center text-gray-600 mb-6">Pemberi akan segera menghubungi Anda melalui WhatsApp.</p>
+        <?php endif; ?>
+
+        <a href="halamanBeranda.php" class="block text-center mt-6 py-2 px-4 bg-gray-200 hover:bg-gray-300 text-[#4F6B4F] font-semibold rounded-lg">
+            <i class="fas fa-home mr-2"></i> Kembali ke Beranda
+        </a>
+    </div>
+
+    <footer id="mobile-footer" class="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 flex justify-around py-2 md:hidden z-10">
+        <button aria-label="Home" class="footer-button flex flex-col items-center text-gray-600 hover:text-[#4F6B4F]" type="button" onclick="location.href='halamanBeranda.php'">
+            <i class="fas fa-home text-xl"></i>
+            <span class="text-xs">Home</span>
+        </button>
+        <button aria-label="Upload Barang" class="footer-button flex flex-col items-center text-gray-600 hover:text-[#4F6B4F]" type="button" onclick="location.href='halamanTambah.php'">
+            <i class="fas fa-plus-circle text-xl"></i>
+            <span class="text-xs">Upload</span>
+        </button>
+        <button aria-label="Profile" class="footer-button flex flex-col items-center text-gray-600 hover:text-[#4F6B4F]" type="button" onclick="location.href='halamanProfil.php'">
+            <i class="fas fa-user-circle text-xl"></i>
+            <span class="text-xs">Profil</span>
+        </button>
+    </footer>
+
 </body>
 </html>
