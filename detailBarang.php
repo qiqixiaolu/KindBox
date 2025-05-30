@@ -184,8 +184,15 @@ try {
     $stmt_donor->execute();
     $donor_raw_details = $stmt_donor->fetch(PDO::FETCH_ASSOC);
 
-    // Calculate donor's goodness level for star rating (counting 'Received' status from donations)
-    // *** CHANGE: Using 'Received' as the status for completed donations ***
+    // Calculate donor's goodness level (rating) based on average rating from 'ratings' table
+    $stmt_donor_avg_rating = $conn->prepare("SELECT AVG(rating) AS avg_rating FROM ratings WHERE donor_id = :donor_id");
+    $stmt_donor_avg_rating->bindParam(':donor_id', $item_details['donor_id']);
+    $stmt_donor_avg_rating->execute();
+    $donor_avg_rating_result = $stmt_donor_avg_rating->fetch(PDO::FETCH_ASSOC);
+    // Round to one decimal place for display, default to 0 if no ratings
+    $donor_average_rating = round($donor_avg_rating_result['avg_rating'] ?? 0, 1); 
+
+    // Calculate donor's goodness level based on total donations received (every 5 items)
     $stmt_donor_donations_count = $conn->prepare("SELECT COUNT(*) AS total_donations FROM donations WHERE donor_id = :donor_id AND status = 'Received'");
     $stmt_donor_donations_count->bindParam(':donor_id', $item_details['donor_id']);
     $stmt_donor_donations_count->execute();
@@ -196,7 +203,8 @@ try {
         'full_name' => htmlspecialchars($donor_raw_details['full_name'] ?? 'N/A'),
         'username' => htmlspecialchars($donor_raw_details['username'] ?? 'N/A'),
         'profile_picture_url' => htmlspecialchars($donor_raw_details['profile_picture_url'] ?? 'https://storage.googleapis.com/a1aa/image/bd3a933d-2733-4863-bea1-4a32e05e398e.jpg'),
-        'level' => $donor_level
+        'level' => $donor_level, // Goodness level based on donation count
+        'average_rating' => $donor_average_rating // Average star rating
     ];
 
     // 3. Fetch Peminat (Interested Users) Details (requires 'interests' table)
@@ -257,12 +265,20 @@ try {
             $user_donations_count_result = $stmt_user_donations_count->fetch(PDO::FETCH_ASSOC);
             $peminat_level = floor($user_donations_count_result['total_donations'] / 5) + 1;
 
+            // Fetch average rating for each potential recipient (peminat)
+            $stmt_peminat_avg_rating = $conn->prepare("SELECT AVG(rating) AS avg_rating FROM ratings WHERE donor_id = :user_id");
+            $stmt_peminat_avg_rating->bindParam(':user_id', $peminat['user_id']);
+            $stmt_peminat_avg_rating->execute();
+            $peminat_avg_rating_result = $stmt_peminat_avg_rating->fetch(PDO::FETCH_ASSOC);
+            $peminat_average_rating = round($peminat_avg_rating_result['avg_rating'] ?? 0, 1);
+
             $peminat_list[] = [
                 'user_id' => $peminat['user_id'],
                 'full_name' => htmlspecialchars($peminat['full_name'] ?? 'N/A'),
                 'username' => htmlspecialchars($peminat['username'] ?? 'N/A'),
                 'profile_picture_url' => htmlspecialchars($peminat['profile_picture_url'] ?? 'https://storage.googleapis.com/a1aa/image/bd3a933d-2733-4863-bea1-4a32e05e398e.jpg'),
                 'level' => $peminat_level,
+                'average_rating' => $peminat_average_rating, // Added average rating for peminat
                 'email' => htmlspecialchars($peminat['email'] ?? 'N/A'),
                 'location' => htmlspecialchars($peminat['location'] ?? 'N/A'),
                 'whatsapp_contact' => htmlspecialchars($peminat['whatsapp_user_contact'] ?? ''),
@@ -355,6 +371,13 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
             border: 2px solid #6B856D; /* Green border for items with interest */
             box-shadow: 0 0 8px rgba(107, 133, 109, 0.4); /* Subtle shadow */
         }
+        /* Rating stars */
+        .rating-stars .fa-star {
+            color: #ddd; /* Default gray */
+        }
+        .rating-stars .fa-star.filled {
+            color: #ffc107; /* Gold for filled stars */
+        }
     </style>
 </head>
 <body class="bg-white">
@@ -391,22 +414,22 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
         // Tampilkan pesan sukses atau error jika ada
         if (isset($_SESSION['success_message'])) {
             echo '<div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mx-auto my-4 max-w-7xl" role="alert">
-                    <strong class="font-bold">Sukses!</strong>
-                    <span class="block sm:inline">' . $_SESSION['success_message'] . '</span>
-                    <span class="absolute top-0 bottom-0 right-0 px-4 py-3" onclick="this.parentElement.style.display=\'none\';">
-                        <svg class="fill-current h-6 w-6 text-green-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>
-                    </span>
-                  </div>';
+                        <strong class="font-bold">Sukses!</strong>
+                        <span class="block sm:inline">' . $_SESSION['success_message'] . '</span>
+                        <span class="absolute top-0 bottom-0 right-0 px-4 py-3" onclick="this.parentElement.style.display=\'none\';">
+                            <svg class="fill-current h-6 w-6 text-green-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>
+                        </span>
+                    </div>';
             unset($_SESSION['success_message']);
         }
         if (isset($_SESSION['error_message'])) {
             echo '<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mx-auto my-4 max-w-7xl" role="alert">
-                    <strong class="font-bold">Error!</strong>
-                    <span class="block sm:inline">' . $_SESSION['error_message'] . '</span>
-                    <span class="absolute top-0 bottom-0 right-0 px-4 py-3" onclick="this.parentElement.style.display=\'none\';">
-                        <svg class="fill-current h-6 w-6 text-red-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>
-                    </span>
-                  </div>';
+                        <strong class="font-bold">Error!</strong>
+                        <span class="block sm:inline">' . $_SESSION['error_message'] . '</span>
+                        <span class="absolute top-0 bottom-0 right-0 px-4 py-3" onclick="this.parentElement.style.display=\'none\';">
+                            <svg class="fill-current h-6 w-6 text-red-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>
+                        </span>
+                    </div>';
             unset($_SESSION['error_message']);
         }
     ?>
@@ -481,14 +504,15 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
                         <p class="text-[#4F6B4F] font-semibold text-sm mb-1">
                             <?= $donor_details['username'] ?>
                         </p>
-                        <div class="text-[#4F6B4F] text-sm">
+                        <div class="rating-stars text-sm">
                             <?php
                                 $max_stars = 5;
+                                $filled_stars_donor_display = round($donor_details['average_rating']); // Use rounded average rating for display
                                 for ($i = 1; $i <= $max_stars; $i++) {
-                                    if ($i <= $donor_details['level']) {
-                                        echo '<i class="fas fa-star text-yellow-400"></i>';
+                                    if ($i <= $filled_stars_donor_display) {
+                                        echo '<i class="fas fa-star filled"></i>';
                                     } else {
-                                        echo '<i class="fas fa-star text-gray-300"></i>';
+                                        echo '<i class="fas fa-star"></i>';
                                     }
                                 }
                             ?>
@@ -578,7 +602,7 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
                                     '<?= $peminat['location'] ?>',
                                     '<?= $peminat['email'] ?>',
                                     '<?= $peminat['whatsapp_contact'] ?>',
-                                    <?= $peminat['level'] ?>,
+                                    '<?= $peminat['average_rating'] ?>',  // Pass average_rating to modal
                                     '<?= $peminat['interest_nama'] ?>',
                                     '<?= $peminat['interest_alamat'] ?>',
                                     '<?= $peminat['interest_jumlah'] ?>',
@@ -603,14 +627,15 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
                                     <p class="text-[#4F6B4F] text-xs mb-2">
                                         <?= $peminat['location'] ?>
                                     </p>
-                                    <div class="text-[#4F6B4F] text-sm mb-3">
+                                    <div class="rating-stars text-sm mb-3">
                                         <?php
-                                            $max_stars = 5;
-                                            for ($i = 1; $i <= $max_stars; $i++) {
-                                                if ($i <= $peminat['level']) {
-                                                    echo '<i class="fas fa-star text-yellow-400"></i>';
+                                            $max_stars_peminat = 5;
+                                            $filled_stars_peminat_display = round($peminat['average_rating']); // Use rounded average rating for display
+                                            for ($i = 1; $i <= $max_stars_peminat; $i++) {
+                                                if ($i <= $filled_stars_peminat_display) {
+                                                    echo '<i class="fas fa-star filled"></i>';
                                                 } else {
-                                                    echo '<i class="fas fa-star text-gray-300"></i>';
+                                                    echo '<i class="fas fa-star"></i>';
                                                 }
                                             }
                                         ?>
@@ -675,7 +700,7 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
                 <div>
                     <p id="modalPeminatUsername" class="text-[#2F4F2F] font-semibold text-lg"></p>
                     <p id="modalPeminatFullName" class="text-[#4F6B4F] text-sm"></p>
-                    <div id="modalPeminatLevel" class="text-[#4F6B4F] text-base mt-1"></div>
+                    <div id="modalPeminatRatingStars" class="rating-stars text-base mt-1"></div>
                 </div>
             </div>
             <div class="text-[#2F4F2F] text-sm space-y-2 mb-6">
@@ -735,7 +760,7 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
         var span = document.getElementsByClassName("close-button")[0];
 
         // Function to show the modal with peminat details
-        function showPeminatDetails(imageUrl, username, fullName, location, email, whatsapp, level, interestNama, interestAlamat, interestJumlah, interestAlasan, interestStatus) {
+        function showPeminatDetails(imageUrl, username, fullName, location, email, whatsapp, averageRating, interestNama, interestAlamat, interestJumlah, interestAlasan, interestStatus) {
             document.getElementById('modalPeminatImage').src = imageUrl;
             document.getElementById('modalPeminatUsername').textContent = '@' + username;
             document.getElementById('modalPeminatFullName').textContent = fullName;
@@ -754,19 +779,20 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
                 whatsappLinkElement.style.display = 'none'; // Hide the button if no contact
             }
 
-            // Set level stars
-            const levelElement = document.getElementById('modalPeminatLevel');
-            levelElement.innerHTML = ''; // Clear previous stars
+            // Set rating stars
+            const ratingStarsElement = document.getElementById('modalPeminatRatingStars');
+            ratingStarsElement.innerHTML = ''; // Clear previous stars
             const maxStars = 5;
+            const filledStars = Math.round(averageRating); // Round to nearest integer for displaying filled stars
             for (let i = 1; i <= maxStars; i++) {
                 const star = document.createElement('i');
                 star.classList.add('fas', 'fa-star');
-                if (i <= level) {
-                    star.classList.add('text-yellow-400'); // Filled star
+                if (i <= filledStars) {
+                    star.classList.add('filled'); // Filled star
                 } else {
                     star.classList.add('text-gray-300'); // Empty star
                 }
-                levelElement.appendChild(star);
+                ratingStarsElement.appendChild(star);
             }
 
             // Set interest form details
