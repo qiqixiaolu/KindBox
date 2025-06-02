@@ -1,5 +1,8 @@
 <?php
+error_reporting(E_ALL ^ E_DEPRECATED);
+
 session_start();
+
 require 'db.php'; // Koneksi ke database
 
 // Pastikan user sudah login

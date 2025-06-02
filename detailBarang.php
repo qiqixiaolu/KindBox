@@ -61,9 +61,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 
     if ($action === 'verify') {
+        // --- START OF CHANGE: Fetch requested quantity from interests table ---
+        $stmt_get_requested_quantity = $conn->prepare("SELECT jumlah FROM interests WHERE item_id = :item_id AND user_id = :user_id");
+        $stmt_get_requested_quantity->bindParam(':item_id', $item_id_post);
+        $stmt_get_requested_quantity->bindParam(':user_id', $recipient_user_id);
+        $stmt_get_requested_quantity->execute();
+        $requested_quantity = $stmt_get_requested_quantity->fetchColumn(); // Get the requested quantity
+
+        if ($requested_quantity === false) { // Should not happen if interest exists
+            $_SESSION['error_message'] = "Detail minat tidak ditemukan.";
+            header("Location: detailBarang.php?item_id=" . $item_id_post);
+            exit();
+        }
+        // --- END OF CHANGE ---
+
         // Check item_count only when verifying. This is where the error message for 0 count will appear.
+        // Also check if requested quantity exceeds available quantity
         if ($current_item_count <= 0) {
             $_SESSION['error_message'] = "Barang sudah habis, tidak dapat diverifikasi.";
+            header("Location: detailBarang.php?item_id=" . $item_id_post);
+            exit();
+        } elseif ($current_item_count < $requested_quantity) { // Added condition
+            $_SESSION['error_message'] = "Jumlah barang yang diminta ($requested_quantity) melebihi stok yang tersedia ($current_item_count).";
             header("Location: detailBarang.php?item_id=" . $item_id_post);
             exit();
         }
@@ -88,18 +107,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $stmt_update_interest_status->execute();
 
             // 2. Decrement item_count in donations table and set recipient details
-            // The item_count should only be decremented once for each successful verification
-            // *** CHANGE: Corrected status mapping for 'donations' table ('Received' instead of 'Diterima', 'Available' instead of 'Tersedia') ***
+            // The item_count should now be decremented by $requested_quantity
+            // *** CHANGE: Decrementing by $requested_quantity instead of 1 ***
             $stmt_update_donation = $conn->prepare("
                 UPDATE donations
-                SET item_count = item_count - 1,
+                SET item_count = item_count - :requested_quantity,
                     recipient_id = :recipient_id,
                     recipient_username = :recipient_username,
                     recipient_location = :recipient_location,
-                    status = CASE WHEN item_count - 1 <= 0 THEN 'Received' ELSE 'Available' END
+                    status = CASE WHEN item_count - :requested_quantity <= 0 THEN 'Received' ELSE 'Available' END
                 WHERE id = :item_id
             ");
             $stmt_update_donation->bindParam(':item_id', $item_id_post);
+            $stmt_update_donation->bindParam(':requested_quantity', $requested_quantity); // Bind the requested quantity
             $stmt_update_donation->bindParam(':recipient_id', $recipient_user_id);
             $stmt_update_donation->bindParam(':recipient_username', $recipient_username);
             $stmt_update_donation->bindParam(':recipient_location', $recipient_location);
@@ -108,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             // Commit transaction
             $conn->commit();
 
-            $_SESSION['success_message'] = "Peminat berhasil diverifikasi dan jumlah barang telah berkurang.";
+            $_SESSION['success_message'] = "Peminat berhasil diverifikasi dan jumlah barang telah berkurang sesuai permintaan.";
             header("Location: detailBarang.php?item_id=" . $item_id_post); // Redirect back to detail page
             exit();
 
@@ -783,7 +803,7 @@ $whatsapp_contact_item = htmlspecialchars($item_details['whatsapp_contact'] ?? '
             const ratingStarsElement = document.getElementById('modalPeminatRatingStars');
             ratingStarsElement.innerHTML = ''; // Clear previous stars
             const maxStars = 5;
-            const filledStars = Math.round(averageRating); // Round to nearest integer for displaying filled stars
+            const filledStars = Math.round(averageRating); // Use rounded average rating for display
             for (let i = 1; i <= maxStars; i++) {
                 const star = document.createElement('i');
                 star.classList.add('fas', 'fa-star');
