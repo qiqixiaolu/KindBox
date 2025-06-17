@@ -70,7 +70,7 @@ if (isset($_GET['error_message'])) {
             margin-bottom: 30px;
         }
         .logo img {
-            width: 60px;
+            width: 80px;
             height: 60px;
             margin-bottom: 10px;
             border-radius: 50%;
@@ -208,7 +208,7 @@ if (isset($_GET['error_message'])) {
 <body>
     <div class="container">
         <div class="logo">
-            <img src="https://storage.googleapis.com/a1aa/image/ba6cfd8e-3595-41ca-6af3-146bbdb8fc60.jpg" alt="KindBox Logo">
+            <img src="logo.png" alt="KindBox Logo">
             <h1 class="title">KindBox</h1>
         </div>
         <?php if (!empty($form_error_message)): ?>

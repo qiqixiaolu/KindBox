@@ -13,12 +13,12 @@ session_start();
     <div class="container">
         <div class="form-section">
             <div class="logo">
-                <img src="https://lh3.googleusercontent.com/d/1q0PjKVPzmVWdLiJLpwfJ1rtl-ttyvtDp=w1000" alt="logo" width="40" height="40">
+                <img src="logo.png" alt="logo" width="40" height="40">
                 <h1 class="title">KindBox</h1>
             </div>
 
             <div class="image-section mobile-only">
-                <img src="https://lh3.googleusercontent.com/d/14ER28wan2OcQfEnCixA0hP78jr5qFdO1=w1000" alt="Illustration" width="400" height="400">
+                <img src="imagery1-kindbox.png" alt="Illustration" width="400" height="400">
             </div>
 
             <p class="welcome-text">SELAMAT DATANG KEMBALI👋🏻</p>
@@ -52,7 +52,7 @@ session_start();
         </div>
 
         <div class="image-section desktop-only">
-            <img src="https://lh3.googleusercontent.com/d/14ER28wan2OcQfEnCixA0hP78jr5qFdO1=w1000" alt="Illustration" width="400" height="400">
+            <img src="imagery1-kindbox.png" alt="Illustration" width="400" height="400">
         </div>
     </div>
 </body>
